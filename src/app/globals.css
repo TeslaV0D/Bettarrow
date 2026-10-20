@@ -10,6 +10,7 @@
   --surface: #181c19;
   --surface-2: #1f2420;
   --surface-3: #272d28;
+  --muscle-idle: #303831;
   --border: #2a302b;
   --border-strong: #3a423b;
   --text: #edf0ea;
@@ -35,6 +36,7 @@
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
   --color-surface-3: var(--surface-3);
+  --color-muscle-idle: var(--muscle-idle);
   --color-border: var(--border);
   --color-border-strong: var(--border-strong);
   --color-text: var(--text);

@@ -1,23 +1,12 @@
 import "server-only";
-import { and, desc, eq, gte, inArray, lte, sql, type SQL } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { setVolumeSql } from "@/server/services/stats";
 import { db } from "@/server/db";
 import * as s from "@/server/db/schema";
 import { getWorkoutDetail, getWorkoutPRs, type WorkoutDetail, type WorkoutPr } from "@/server/services/workouts";
 import { attributeToMuscles, isWorkingSet, setVolume, workoutDurationSeconds, workoutTotals, type MuscleContribution } from "@/lib/training";
 import type { YMD } from "@/lib/dates";
 import { getSettings } from "./settings";
-
-/**
- * SQL expression for the volume of a set row (joined with workout_exercises as `we`/table).
- * Mirrors `setVolume` in src/lib/training.ts — keep both in sync (covered by tests).
- */
-export function setVolumeSql(bodyweightInVolume: boolean): SQL {
-  return sql`case when ${s.workoutSets.completed} and ${s.workoutSets.setType} <> 'warmup'
-      and ${s.workoutExercises.tracking} = 'reps' and ${s.workoutExercises.loadMode} <> 'none'
-      and (${s.workoutExercises.loadMode} = 'external' or ${bodyweightInVolume})
-      and ${s.workoutSets.reps} > 0 and ${s.workoutSets.loadKg} is not null
-    then ${s.workoutSets.loadKg} * ${s.workoutSets.reps} else 0 end`;
-}
 
 export const workingSetSql = sql`(${s.workoutSets.completed} and ${s.workoutSets.setType} <> 'warmup')`;
 
