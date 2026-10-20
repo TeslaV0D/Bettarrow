@@ -1,6 +1,10 @@
 # syntax=docker/dockerfile:1.7
 # ---------------------------------------------------------------------------
-# Bettarrow production image (Next.js standalone output, ~200 MB)
+# Bettarrow production image
+#   - Next.js standalone server (no node_modules on the host, no host Node.js)
+#   - bundled migration job (/app/migrate.mjs) used by the `migrate` service
+#   - runs as unprivileged user `app` (UID 1001), tini as init
+# Build:  docker build -t bettarrow-web:local .
 # ---------------------------------------------------------------------------
 ARG NODE_IMAGE=node:22-alpine
 
@@ -14,15 +18,19 @@ WORKDIR /app
 ENV NEXT_TELEMETRY_DISABLED=1
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
+RUN npm run build && npm run build:migrate
 
 FROM ${NODE_IMAGE} AS runtime
 WORKDIR /app
+LABEL org.opencontainers.image.title="Bettarrow" \
+      org.opencontainers.image.description="Self-hosted gym training tracker" \
+      org.opencontainers.image.licenses="UNLICENSED"
 ENV NODE_ENV=production \
     NEXT_TELEMETRY_DISABLED=1 \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
-    BACKUP_DIR=/backups
+    BACKUP_DIR=/backups \
+    MIGRATIONS_DIR=/app/drizzle
 RUN apk add --no-cache tini su-exec \
  && addgroup -S app -g 1001 && adduser -S app -u 1001 -G app \
  && mkdir -p /backups && chown app:app /backups
@@ -30,10 +38,11 @@ COPY --from=build --chown=app:app /app/.next/standalone ./
 COPY --from=build --chown=app:app /app/.next/static ./.next/static
 COPY --from=build --chown=app:app /app/public ./public
 COPY --from=build --chown=app:app /app/drizzle ./drizzle
+COPY --from=build --chown=app:app /app/dist/migrate.mjs ./migrate.mjs
 COPY --from=build --chown=app:app /app/scripts/hash-password.mjs ./scripts/hash-password.mjs
 COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
 ENTRYPOINT ["/sbin/tini", "--", "docker-entrypoint.sh"]
 CMD ["node", "server.js"]

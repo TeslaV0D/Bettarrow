@@ -11,4 +11,6 @@ playwright-report
 coverage
 *.log
 Dockerfile
+compose.yaml
 docker-compose*.yml
+dist

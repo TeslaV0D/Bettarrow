@@ -1,0 +1,103 @@
+# ---------------------------------------------------------------------------
+# Bettarrow – Docker Compose / Portainer stack
+#
+# Portainer: Stacks → Add stack → Repository, Compose path: compose.yaml
+# Required variables (set in Portainer or in .env): POSTGRES_PASSWORD, APP_PASSWORD_HASH
+# See README.md → "Deployment mit Portainer".
+#
+# Start order: db (healthy) → migrate (one-shot job, must succeed) → web
+# Data lives in the named volumes bettarrow-db-data / bettarrow-backups and survives
+# container replacement, restarts and stack updates.
+# ---------------------------------------------------------------------------
+name: bettarrow
+
+x-app-image: &app-image
+  build:
+    context: .
+    dockerfile: Dockerfile
+  image: bettarrow-web:local
+  # Always build from the checked-out source on `up` / Portainer redeploy (no registry needed).
+  pull_policy: build
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: bettarrow-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bettarrow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-bettarrow}
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    # No published port: only reachable from the other services in this stack.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
+    logging: *logging
+
+  # One-shot job: applies database migrations + built-in exercise data, then exits.
+  # Runs on every deploy/redeploy before the web app starts (idempotent, advisory-locked).
+  migrate:
+    <<: *app-image
+    container_name: bettarrow-migrate
+    command: ["node", "migrate.mjs"]
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_USER: ${POSTGRES_USER:-bettarrow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-bettarrow}
+      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-Europe/Berlin}
+    healthcheck:
+      disable: true
+    logging: *logging
+
+  web:
+    <<: *app-image
+    container_name: bettarrow-web
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    environment:
+      POSTGRES_HOST: db
+      POSTGRES_USER: ${POSTGRES_USER:-bettarrow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      POSTGRES_DB: ${POSTGRES_DB:-bettarrow}
+      MIGRATE_ON_START: "false"
+      APP_PASSWORD_HASH: ${APP_PASSWORD_HASH:-}
+      APP_PASSWORD: ${APP_PASSWORD:-}
+      DEFAULT_TIMEZONE: ${DEFAULT_TIMEZONE:-Europe/Berlin}
+      TZ: ${DEFAULT_TIMEZONE:-Europe/Berlin}
+      SESSION_MAX_AGE_DAYS: ${SESSION_MAX_AGE_DAYS:-30}
+      COOKIE_SECURE: ${COOKIE_SECURE:-auto}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+      BACKUP_KEEP: ${BACKUP_KEEP:-14}
+    ports:
+      - "${APP_BIND:-0.0.0.0}:${APP_PORT:-3000}:3000"
+    volumes:
+      # Named volume by default; set BACKUP_PATH to an absolute host path (e.g. /srv/bettarrow/backups)
+      # to get the backup files directly on the host.
+      - ${BACKUP_PATH:-backups}:/backups
+    logging: *logging
+
+volumes:
+  db-data:
+    name: bettarrow-db-data
+  backups:
+    name: bettarrow-backups

@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { resolveDatabaseUrl } from "./database-url";
 
 const boolish = (def: boolean) =>
   z
@@ -7,7 +8,7 @@ const boolish = (def: boolean) =>
     .transform((v) => (v === undefined ? def : ["true", "1", "yes"].includes(v)));
 
 const schema = z.object({
-  DATABASE_URL: z.string().min(1).default("postgres://bettarrow:bettarrow@localhost:5432/bettarrow"),
+  DATABASE_URL: z.string().min(1),
   /** scrypt hash created with `npm run hash-password` (preferred). */
   APP_PASSWORD_HASH: z.string().optional(),
   /** Plain password (fallback, e.g. for quick local setups). */
@@ -25,7 +26,7 @@ const schema = z.object({
 export type Env = z.infer<typeof schema>;
 
 function load(): Env {
-  const parsed = schema.safeParse(process.env);
+  const parsed = schema.safeParse({ ...process.env, DATABASE_URL: resolveDatabaseUrl(process.env) });
   if (!parsed.success) {
     const issues = parsed.error.issues.map((i) => `${i.path.join(".")}: ${i.message}`).join("; ");
     throw new Error(`Invalid environment configuration: ${issues}`);

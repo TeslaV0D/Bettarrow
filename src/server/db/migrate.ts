@@ -28,3 +28,23 @@ export async function migrateAndSeed(url: string, opts: { migrationsFolder?: str
     await client.end({ timeout: 5 });
   }
 }
+
+/**
+ * Compares the newest migration in ./drizzle/meta/_journal.json (bundled at build time) with the
+ * migrations recorded in the database. Used by the web app when migrations run as a separate job.
+ */
+export async function getSchemaStatus(url: string): Promise<{ upToDate: boolean; expected: number; applied: number }> {
+  const journal = (await import("../../../drizzle/meta/_journal.json")).default as { entries: { when: number }[] };
+  const expected = journal.entries.length;
+  const latest = Math.max(0, ...journal.entries.map((e) => e.when));
+  const client = postgres(url, { max: 1, onnotice: () => {} });
+  try {
+    const [{ exists }] = await client<{ exists: boolean }[]>`select to_regclass('drizzle.__drizzle_migrations') is not null as exists`;
+    if (!exists) return { upToDate: expected === 0, expected, applied: 0 };
+    const [row] = await client<{ applied: number; latest: string | null }[]>`
+      select count(*)::int as applied, max(created_at)::text as latest from drizzle.__drizzle_migrations`;
+    return { upToDate: Number(row.latest ?? 0) >= latest, expected, applied: row.applied };
+  } finally {
+    await client.end({ timeout: 5 });
+  }
+}
