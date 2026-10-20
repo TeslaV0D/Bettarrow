@@ -2,6 +2,32 @@
 
 Alle relevanten Änderungen. Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
+## [1.1.0] – 2026-10-20
+
+Deployment über GitHub → Portainer (Git-Stack) → Docker.
+
+### Hinzugefügt
+- `compose.yaml` für Docker Compose und Portainer-Git-Stacks: `db`, einmaliger `migrate`-Job, `web`. Feste Container- und Volume-Namen (`bettarrow-db-data`, `bettarrow-backups`), Log-Rotation, Pflichtvariablen mit klarer Fehlermeldung.
+- `scripts/hash-password.py`: Passwort-Hash ohne Node.js erzeugen (kompatibel zum App-Format).
+- `getSchemaStatus()`: Die App startet nicht auf einem veralteten Schema.
+- Optionaler absoluter Host-Pfad für App-Backups (`BACKUP_PATH`).
+- `public/robots.txt` (keine Indexierung).
+- README: erstes Deployment mit Portainer, Variablen, Updates, Rollback, Backup/Restore mit und ohne Checkout, Alternativen ohne Git-Stack, Verhalten von Auto-Updates in Portainer CE.
+
+### Geändert
+- Migrationen laufen in Produktion nur noch im `migrate`-Job (gebündelt als `dist/migrate.mjs`), nicht mehr beim App-Start. In der Entwicklung bleibt `MIGRATE_ON_START` aktiv.
+- Datenbankzugang über `POSTGRES_*`-Variablen, die URL wird mit Encoding gebaut. Sonderzeichen im DB-Passwort funktionieren.
+- `backup-db.sh` / `restore-db.sh` arbeiten über Containernamen, also auch ohne Compose-Projektverzeichnis. Der Restore führt danach den Migrations-Job aus.
+- Dockerfile ohne `# syntax=`-Zeile (kein zusätzlicher Image-Pull von Docker Hub) und ohne `VOLUME` (keine anonymen Volumes je Deployment).
+- `docker-compose.yml` ersetzt durch `compose.yaml`. Backups liegen jetzt im Volume statt im Bind-Mount `./backups`.
+
+### Behoben
+- Image-Build aus einem frischen Git-Klon schlug fehl, weil der leere Ordner `public/` nicht versioniert war.
+- Unbenutzte Imports (ESLint-Warnungen).
+
+### Upgrade von 1.0.0
+Das alte Compose-Projekt nutzte das Volume `bettarrow_db-data`. Vor dem Umstieg einen Dump ziehen (`./scripts/backup-db.sh` mit `DB_CONTAINER=<alter Containername>`), den neuen Stack starten und den Dump mit `./scripts/restore-db.sh` einspielen.
+
 ## [1.0.0] – 2026-10-20
 
 Erste vollständige Version.

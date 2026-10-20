@@ -10,10 +10,10 @@ Next.js 16 App Router (Node.js, standalone) ── proxy.ts (Cookie-Gate)
    │  Server Components lesen direkt über Drizzle
    │  src/server/services/*  (Domänenlogik, DB injiziert → testbar)
    ▼
-PostgreSQL 16 (Docker-Volume)            ./backups (JSON .gz, pg_dump)
+PostgreSQL 16 (Volume bettarrow-db-data)  /backups (Volume bettarrow-backups, JSON .gz)
 ```
 
-Ein Prozess, eine Datenbank, keine weiteren Dienste. Beim Serverstart (`instrumentation.ts`) werden Konfiguration geprüft, Migrationen + Referenzdaten unter einem Advisory-Lock angewendet und der Backup-Scheduler gestartet.
+Ein App-Prozess, eine Datenbank, keine weiteren Dienste. Beim Serverstart (`instrumentation.ts`) wird die Konfiguration geprüft und der Backup-Scheduler gestartet. Migrationen laufen in Produktion **nicht** im App-Prozess, sondern im Deployment-Job `migrate` (siehe [Deployment](#deployment)). Die App prüft beim Start nur, ob das Schema aktuell ist, und beendet sich sonst.
 
 ## Technologieentscheidungen
 
@@ -48,10 +48,11 @@ src/
     queries/            Lese-Abfragen für Seiten (server-only)
     actions/            Server Actions (immer über run(): Auth + Fehlerbehandlung)
     seed/               Muskelgruppen, Equipment, Bewegungsmuster, 142 Übungen
-  instrumentation*.ts   Start: Env-Prüfung, Migration, Backup-Scheduler
+  instrumentation*.ts   Start: Env-Prüfung, Schema-Prüfung (bzw. Migration mit MIGRATE_ON_START), Backup-Scheduler
   proxy.ts              Cookie-Gate (Weiterleitung zum Login); Sicherheitsgrenze ist der Server-Code
 drizzle/                SQL-Migrationen
-scripts/                hash-password.mjs, migrate.ts, backup-db.sh, restore-db.sh, dev-demo-data.ts
+scripts/                hash-password.mjs/.py, migrate.ts (→ dist/migrate.mjs), backup-db.sh, restore-db.sh, dev-demo-data.ts
+compose.yaml            Stack für Docker Compose und Portainer (db, migrate, web)
 tests/                  unit/, integration/, e2e/
 ```
 
@@ -112,6 +113,28 @@ Definiert in `src/lib/training.ts` (die SQL-Variante in `services/stats.ts` wird
 ### Export, Import, Backup
 
 `services/data-transfer.ts`: versioniertes JSON (`format: "bettarrow-export", version: 1`), Validierung von Struktur, Version und internen Referenzen; Import ersetzt alles in **einer Transaktion** und spielt danach die aktuellen Referenzdaten ein. `services/backups.ts`: gzip, atomares Schreiben (tmp + rename), Rotation, Schutz gegen Pfad-Traversal.
+
+## Deployment
+
+```
+compose.yaml (Projekt "bettarrow")
+  db       postgres:16-alpine  ── Volume bettarrow-db-data, kein Host-Port, Healthcheck pg_isready
+  migrate  bettarrow-web:local ── node migrate.mjs, einmalig, restart "no"   (depends_on: db healthy)
+  web      bettarrow-web:local ── node server.js, Port ${APP_PORT}          (depends_on: migrate completed successfully)
+                                  Volume bettarrow-backups (oder BACKUP_PATH) → /backups
+```
+
+- **Ein Image, zwei Rollen.** `migrate` und `web` nutzen dasselbe lokal gebaute Image (`pull_policy: build`). Jedes `docker compose up` bzw. Portainer-*Pull and redeploy* baut aus dem ausgecheckten Stand neu. Eine Registry ist nicht nötig.
+- **Kontrollierte Migrationen.**
+  - `scripts/migrate.ts` wird beim Image-Build mit esbuild zu `dist/migrate.mjs` gebündelt, damit im Runtime-Image keine Dev-Abhängigkeiten nötig sind.
+  - Das Skript wartet auf die Datenbank und wendet Migrationen + Referenzdaten auf **einer** Verbindung unter einem `pg_advisory_lock` an. Selbst ein versehentlich parallel gestarteter zweiter Job wartet daher nur.
+  - `web` startet erst nach Exit-Code 0 (`service_completed_successfully`).
+  - `getSchemaStatus()` vergleicht das Migrations-Journal im Image mit `drizzle.__drizzle_migrations`. Ist die DB älter als das Image, beendet sich `web` mit Hinweis statt auf einem veralteten Schema zu laufen.
+  - Für die Entwicklung migriert `MIGRATE_ON_START=true` (Standard außerhalb von Compose) im App-Prozess.
+- **Datenbank-URL.** Compose übergibt `POSTGRES_HOST/USER/PASSWORD/DB` statt einer fertigen URL. `server/database-url.ts` baut die URL mit URL-Encoding, deshalb funktionieren beliebige Sonderzeichen im Passwort. `DATABASE_URL` hat Vorrang, wenn gesetzt.
+- **Feste Namen.** Containernamen (`bettarrow-db/-migrate/-web`) und Volume-Namen sind fest, unabhängig vom Stack-Namen in Portainer. Die Backup-/Restore-Skripte arbeiten deshalb ohne Compose-Projektverzeichnis. Volumes überleben Container-Ersatz, Updates und das Löschen des Stacks.
+- **Keine relativen Bind-Mounts.** Für Portainer-Git-Stacks unzuverlässig (CE). Optionaler Host-Ordner nur über einen absoluten `BACKUP_PATH`.
+- **Kein Docker-Hub-Frontend.** Das Dockerfile nutzt das eingebaute BuildKit-Frontend (keine `# syntax=`-Zeile), damit ein Build nur `node:22-alpine` und `postgres:16-alpine` benötigt.
 
 ## Sicherheit
 

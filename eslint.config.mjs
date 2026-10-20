@@ -16,6 +16,12 @@ const eslintConfig = defineConfig([
     "scratch/**",
     "test-results/**",
   ]),
+  {
+    rules: {
+      // `_`-prefixed names mark intentionally unused destructured fields (e.g. stripping ids).
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_", destructuredArrayIgnorePattern: "^_" }],
+    },
+  },
 ]);
 
 export default eslintConfig;

@@ -1,12 +1,13 @@
 # Implementierungsstand
 
-Stand: 2026-10-20 · Version 1.0.0
+Stand: 2026-10-20 · Version 1.1.0
 
 ## Status nach Bereichen
 
 | Bereich | Status | Anmerkungen |
 | --- | --- | --- |
-| Fundament (Schema, Migrationen, Auth, Designsystem, Navigation, Docker) | ✅ fertig | Migration + Seed beim Start, Healthchecks, unprivilegierter Container |
+| Fundament (Schema, Migrationen, Auth, Designsystem, Navigation, Docker) | ✅ fertig | Healthchecks, unprivilegierter Container |
+| Deployment (Compose / Portainer-Git-Stack) | ✅ fertig | `compose.yaml` mit db, einmaligem `migrate`-Job und web; Named Volumes; keine Secrets im Repo; getestet mit Portainer CE 2.45.2 |
 | Übungsdatenbank & Suche | ✅ fertig | 142 Übungen, 22 Muskelgruppen (inkl. Untergruppen), 14 Equipment-Typen, 23 Bewegungsmuster; Suche über Name, Aliasse, Muskel, Equipment |
 | Eigene Übungen / Kategorien | ✅ fertig | Anlegen, Bearbeiten, Archivieren; eigenes Equipment, Bewegungsmuster, Muskelgruppen |
 | Trainingsvorlagen | ✅ fertig | Reihenfolge per Menü (hoch/runter) statt Drag & Drop |
@@ -32,13 +33,14 @@ Start aus Vorlage, Kalender, Dashboard oder frei · Übungen hinzufügen (Mehrfa
 | --- | --- |
 | `npm run typecheck` (tsc) | ✅ ohne Fehler |
 | `npm run lint` (ESLint inkl. React-Hooks/Compiler-Regeln) | ✅ ohne Fehler |
-| Unit-Tests (Vitest) | ✅ 52/52 – Datum/Zeitzone/DST/Jahreswechsel, Perioden, Last-/Volumenregeln, e1RM, Vorbelegung, PR-Erkennung, Muskelzuordnung, Kalender/Wiederholungen, Passwort-Hash, Einheiten, Körpergewichtsmittel |
+| Unit-Tests (Vitest) | ✅ 55/55 – Datum/Zeitzone/DST/Jahreswechsel, Perioden, Last-/Volumenregeln, e1RM, Vorbelegung, PR-Erkennung, Muskelzuordnung, Kalender/Wiederholungen, Passwort-Hash (Node + Python-Generator), DB-URL mit Sonderzeichen-Passwort, Einheiten, Körpergewichtsmittel |
 | Integrationstests (Vitest + PostgreSQL 16) | ✅ 38/38 – Migration auf leerer DB, Training starten (auch parallel ohne Duplikat), Vorbelegung (ignoriert aktive/verworfene Einheiten, unabhängig von Vorlagenänderungen), Sync (viele Sätze, Bearbeiten, Idempotenz, veraltete Snapshots, Gerätekonflikt, ungültige Daten), Körpergewicht-Snapshots, Abschluss/Verwerfen/Undo, PRs, Kalender (Planen, Verschieben, Wiederholungen, Monats-/Jahreswechsel, Verknüpfung), Vorlagen ändern ohne Historie zu verändern, Statistik (SQL ≙ TS-Regeln), Export→Import exakt identisch, atomarer Rollback, Backup-Rotation/Restore |
 | `npm run build` (Produktion) | ✅ ohne Warnungen |
 | E2E (Playwright, Chromium) gegen Produktionsbuild | ✅ 8/8 – Login/API-Schutz, kompletter Trainingsablauf inkl. Reload und Vorbelegung, Offline-Autosave, Reload direkt nach Eingabe, Kalender, Statistik/Profil/Export, Mobile ohne horizontales Scrollen, Touch-Ziele ≥ 44 px, keine Konsolenfehler |
-| Docker | ✅ Image-Build, `docker compose up` (beide Services healthy, DB-Port nicht veröffentlicht), E2E 8/8 gegen den Container, Persistenz nach `down`/`up`, `backup-db.sh` → Daten löschen → `restore-db.sh` stellt den Stand wieder her, automatische JSON-Backups im Bind-Mount, `hash-password.mjs` im Container |
+| Docker Compose (`compose.yaml`) | ✅ Frischer Start: db healthy → migrate exited (0) → web healthy, DB-Port nicht veröffentlicht. Fehlendes `POSTGRES_PASSWORD` bricht mit klarer Meldung ab. E2E 8/8 gegen den Stack. Codeänderung + `up -d` baut neu, migrate läuft erneut, Daten bleiben. `down`/`up` behält Daten. `backup-db.sh` → Daten löschen → `restore-db.sh` stellt den Stand wieder her. `web` verweigert den Start auf nicht migrierter DB. Sonderzeichen-Passwörter (`@ / # :`) funktionieren. |
+| Portainer CE 2.45.2 (Git-Stack, lokaler Git-Server) | ✅ Stack aus Repository mit Variablen nur in Portainer: Build, Migration, web healthy, E2E 8/8. *Pull and redeploy* übernimmt neue Commits und baut neu, Daten bleiben. Rollback per Tag-Referenz und zurück funktioniert. Stack löschen + neu anlegen behält die Volumes. GitOps-Polling (Intervall 1 min) hat in CE keinen Redeploy ausgelöst → manueller Redeploy dokumentiert. |
 
-Hinweis zur Testumgebung: Der Docker-Build wurde in der Entwicklungs-Sandbox mit einem Basisimage gebaut, das zusätzlich der dortigen Proxy-CA vertraut (`--build-arg NODE_IMAGE=…`); das Projekt-Dockerfile selbst ist unverändert und nutzt `node:22-alpine`.
+Hinweis zur Testumgebung: Die Docker-Builds liefen in der Entwicklungs-Sandbox mit einem lokal gebauten `node:22-alpine`, das zusätzlich der dortigen TLS-Proxy-CA vertraut. Das Projekt-Dockerfile und `compose.yaml` sind dafür nicht verändert. Portainer lief lokal und hat das Repository von einem lokalen Git-Server geklont, nicht von GitHub. Ein Deployment auf dem Zielserver ist damit **nicht** erfolgt.
 
 ## Bekannte Einschränkungen
 
@@ -50,6 +52,9 @@ Hinweis zur Testumgebung: Der Docker-Build wurde in der Entwicklungs-Sandbox mit
 - **Übungsbilder**: Datenfeld vorhanden, aber kein Upload und keine mitgelieferten Bilder.
 - **Körperkarte**: stilisierte Darstellung; eigene Muskelgruppen erscheinen in Statistiken, aber nicht auf der Figur. Seitliche Bauchmuskeln sind nur in der Vorderansicht abgebildet.
 - **Login-Rate-Limit** wird im Speicher gehalten (Reset bei Neustart).
+- **Eine Instanz pro Docker-Host**: Container- und Volume-Namen sind fest (`bettarrow-*`).
+- **Automatische Updates** in Portainer CE nicht verlässlich (GitOps-Polling ohne Wirkung im Test, Webhooks nur BE): Updates per *Pull and redeploy*.
+- **Migrationen nur vorwärts**: ein Rollback über eine Schemaänderung hinweg braucht den DB-Dump von vor dem Update.
 - **Körpergewichtsfaktoren** sind Näherungswerte (z. B. Liegestütz 0,65) und pro Übung anpassbar.
 
 ## Offene / mögliche Erweiterungen
