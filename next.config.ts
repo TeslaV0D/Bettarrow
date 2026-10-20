@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   devIndicators: false,
   reactStrictMode: true,
+  experimental: {
+    // Full data imports are uploaded through a route handler; allow large export files.
+    proxyClientMaxBodySize: "64mb",
+  },
   turbopack: {
     rules: {
       "*.css": {
