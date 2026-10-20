@@ -98,7 +98,10 @@ export function RestTimerBar({ sound, defaultSeconds }: { sound: boolean; defaul
         </div>
         <div className="flex items-center gap-2 px-3 py-2">
           <div className="min-w-0 flex-1">
-            <p className="truncate text-xs text-muted">{done ? "Pause vorbei" : paused ? "Pausiert" : "Pause"}{s.label ? ` · ${s.label}` : ""}</p>
+            <p className="truncate text-xs text-muted">
+              {done ? "Pause vorbei" : paused ? "Pausiert" : "Pause"}
+              {s.label ? <span className="hidden sm:inline"> · {s.label}</span> : null}
+            </p>
             <p className={cn("tabular text-2xl font-semibold leading-tight", done && "text-accent")} aria-label={`Verbleibend ${formatClock(remaining / 1000)}`}>
               {done ? "0:00" : formatClock(remaining / 1000)}
             </p>
