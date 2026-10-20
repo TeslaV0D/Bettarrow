@@ -14,7 +14,7 @@
     "test:e2e": "playwright test",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx scripts/migrate.ts",
-    "hash-password": "tsx scripts/hash-password.ts",
+    "hash-password": "node scripts/hash-password.mjs",
     "check": "npm run typecheck && npm run lint && npm run test"
   },
   "dependencies": {
