@@ -12,7 +12,7 @@ export async function GET(_req: Request, ctx: { params: Promise<{ name: string }
   const p = resolveBackupPath(env.BACKUP_DIR, name);
   if (!p) return Response.json({ error: "not_found" }, { status: 404 });
   try {
-    const buf = await readFile(p);
+    const buf = await readFile(/*turbopackIgnore: true*/ p);
     return new Response(new Uint8Array(buf), {
       headers: {
         "content-type": name.endsWith(".gz") ? "application/gzip" : "application/json",

@@ -47,6 +47,10 @@ export function clearDraft(id: string) {
  */
 export function useWorkoutSync(state: LoggerState, onSynced: (serverRevision: number) => void) {
   const [status, setStatus] = useState<SyncStatus>(state.revision > state.baseRevision ? "pending" : "saved");
+  const statusRef = useRef(status);
+  useLayoutEffect(() => {
+    statusRef.current = status;
+  }, [status]);
   const stateRef = useRef(state);
   const syncedRevision = useRef(state.baseRevision);
   const inFlight = useRef<Promise<void> | null>(null);
@@ -126,13 +130,18 @@ export function useWorkoutSync(state: LoggerState, onSynced: (serverRevision: nu
     flushRef.current = flush;
   }, [flush]);
 
-  // Local persistence + debounced sync on every change.
-  useEffect(() => {
+  // Local persistence runs synchronously during commit (layout effect), so a reload or tab close
+  // right after an input can never lose it. The server sync is debounced.
+  useLayoutEffect(() => {
+    if (state.revision <= syncedRevision.current) return;
     try {
       localStorage.setItem(draftKey(state.workoutId), JSON.stringify(state));
     } catch {
       /* storage full or unavailable: server sync still works */
     }
+  }, [state]);
+
+  useEffect(() => {
     if (state.revision > syncedRevision.current && !blocked.current) {
       setStatus((s) => (s === "offline" ? s : "pending"));
       if (timer.current) clearTimeout(timer.current);
@@ -151,10 +160,11 @@ export function useWorkoutSync(state: LoggerState, onSynced: (serverRevision: nu
       void flush();
     };
     const onBeforeUnload = (e: BeforeUnloadEvent) => {
-      if (stateRef.current.revision > syncedRevision.current && !blocked.current) {
-        void flush(true);
-        e.preventDefault();
-      }
+      if (stateRef.current.revision <= syncedRevision.current || blocked.current) return;
+      // Pending changes are always in localStorage and are sent with keepalive; only warn when
+      // the server has been unreachable, i.e. the data currently exists on this device only.
+      void flush(true);
+      if (statusRef.current === "offline" || statusRef.current === "error") e.preventDefault();
     };
     document.addEventListener("visibilitychange", onHide);
     window.addEventListener("pagehide", onPageHide);

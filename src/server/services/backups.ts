@@ -24,13 +24,13 @@ function stamp(d: Date) {
 /** Writes a gzipped JSON export into `dir` (atomically via rename) and prunes old automatic backups. */
 export async function createBackup(db: Db, dir: string, opts: { keep: number; label?: string; now?: Date }): Promise<BackupFile> {
   const now = opts.now ?? new Date();
-  await mkdir(dir, { recursive: true });
+  await mkdir(/*turbopackIgnore: true*/ dir, { recursive: true });
   const data = await exportData(db, now);
   const name = `bettarrow-${stamp(now)}${opts.label ? `-${opts.label}` : ""}.json.gz`;
   const tmp = path.join(dir, `.${name}.tmp`);
   const buf = gzipSync(Buffer.from(JSON.stringify(data)));
-  await writeFile(tmp, buf, { mode: 0o600 });
-  await rename(tmp, path.join(dir, name));
+  await writeFile(/*turbopackIgnore: true*/ tmp, buf, { mode: 0o600 });
+  await rename(/*turbopackIgnore: true*/ tmp, path.join(dir, name));
   await pruneBackups(dir, opts.keep);
   return { name, size: buf.length, createdAt: now };
 }
@@ -38,7 +38,7 @@ export async function createBackup(db: Db, dir: string, opts: { keep: number; la
 export async function listBackups(dir: string): Promise<BackupFile[]> {
   let names: string[];
   try {
-    names = await readdir(dir);
+    names = await readdir(/*turbopackIgnore: true*/ dir);
   } catch {
     return [];
   }
@@ -46,7 +46,7 @@ export async function listBackups(dir: string): Promise<BackupFile[]> {
     names
       .filter((n) => BACKUP_RE.test(n))
       .map(async (name) => {
-        const st = await stat(path.join(dir, name));
+        const st = await stat(/*turbopackIgnore: true*/ path.join(dir, name));
         return { name, size: st.size, createdAt: st.mtime };
       }),
   );
@@ -58,7 +58,7 @@ export async function pruneBackups(dir: string, keep: number) {
   const files = await listBackups(dir);
   const auto = files.filter((f) => isAutomaticBackup(f.name));
   const labelled = files.filter((f) => !isAutomaticBackup(f.name));
-  for (const f of [...auto.slice(keep), ...labelled.slice(keep)]) await unlink(path.join(dir, f.name)).catch(() => {});
+  for (const f of [...auto.slice(keep), ...labelled.slice(keep)]) await unlink(/*turbopackIgnore: true*/ path.join(dir, f.name)).catch(() => {});
 }
 
 export function resolveBackupPath(dir: string, name: string): string | null {
@@ -70,7 +70,7 @@ export function resolveBackupPath(dir: string, name: string): string | null {
 export async function readBackup(dir: string, name: string): Promise<unknown> {
   const p = resolveBackupPath(dir, name);
   if (!p) throw new Error("Ungültiger Dateiname");
-  return parseBackupBuffer(await readFile(p));
+  return parseBackupBuffer(await readFile(/*turbopackIgnore: true*/ p));
 }
 
 /** Parses a (optionally gzipped) JSON export. */
