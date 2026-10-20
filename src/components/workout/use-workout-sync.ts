@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toSyncPayload, type LoggerState } from "@/lib/workout-reducer";
 import type { SyncResult } from "@/lib/workout-schema";
 
@@ -56,7 +56,10 @@ export function useWorkoutSync(state: LoggerState, onSynced: (serverRevision: nu
   const blocked = useRef(false); // conflict: stop auto-sync until resolved
   const conflictRevision = useRef(0);
 
-  stateRef.current = state;
+  const flushRef = useRef<(keepalive?: boolean) => Promise<void>>(async () => {});
+  useLayoutEffect(() => {
+    stateRef.current = state;
+  }, [state]);
 
   const send = useCallback(async (keepalive = false): Promise<void> => {
     const current = stateRef.current;
@@ -96,7 +99,7 @@ export function useWorkoutSync(state: LoggerState, onSynced: (serverRevision: nu
       const delay = retryDelay.current;
       retryDelay.current = Math.min(30_000, delay * 2);
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => void flush(), delay);
+      timer.current = setTimeout(() => void flushRef.current(), delay);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -116,9 +119,12 @@ export function useWorkoutSync(state: LoggerState, onSynced: (serverRevision: nu
     // Changes made while the request was in flight.
     if (!blocked.current && stateRef.current.revision > syncedRevision.current && navigator.onLine) {
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => void flush(), 400);
+      timer.current = setTimeout(() => void flushRef.current(), 400);
     }
   }, [send]);
+  useLayoutEffect(() => {
+    flushRef.current = flush;
+  }, [flush]);
 
   // Local persistence + debounced sync on every change.
   useEffect(() => {
@@ -172,5 +178,6 @@ export function useWorkoutSync(state: LoggerState, onSynced: (serverRevision: nu
     setTimeout(() => void flush(), 0);
   }, [flush, onSynced]);
 
-  return { status, flush, resolveConflictKeepMine, isDirty: () => stateRef.current.revision > syncedRevision.current };
+  const isDirty = useCallback(() => stateRef.current.revision > syncedRevision.current, []);
+  return { status, flush, resolveConflictKeepMine, isDirty };
 }

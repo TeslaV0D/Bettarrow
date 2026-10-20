@@ -19,11 +19,12 @@ export function StartWorkoutDialog({ open, onOpenChange }: { open: boolean; onOp
   useEffect(() => {
     if (!open) return;
     let cancelled = false;
-    setError(null);
     getStartOptionsAction().then((res) => {
       if (cancelled) return;
-      if (res.ok) setOptions(res.data);
-      else setError(res.error);
+      if (res.ok) {
+        setOptions(res.data);
+        setError(null);
+      } else setError(res.error);
     });
     return () => {
       cancelled = true;

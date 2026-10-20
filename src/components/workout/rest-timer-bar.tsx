@@ -7,15 +7,21 @@ import { formatClock } from "@/lib/format";
 import { playBeep, restTimer } from "./rest-timer-store";
 
 const QUICK = [60, 90, 120, 180];
+const noopSubscribe = () => () => {};
 
 /** Floating, non-blocking rest timer bar. */
 export function RestTimerBar({ sound, defaultSeconds }: { sound: boolean; defaultSeconds: number }) {
   const s = useSyncExternalStore(restTimer.subscribe, restTimer.getSnapshot, restTimer.getServerSnapshot);
   const [showQuick, setShowQuick] = useState(false);
-  const [perm, setPerm] = useState<NotificationPermission | "unsupported">("unsupported");
+  const [permVersion, setPermVersion] = useState(0);
+  const perm = useSyncExternalStore(
+    noopSubscribe,
+    () => (typeof Notification === "undefined" ? "unsupported" : Notification.permission),
+    () => "unsupported" as const,
+  );
+  void permVersion;
 
   useEffect(() => {
-    setPerm(typeof Notification === "undefined" ? "unsupported" : Notification.permission);
     restTimer.onFinish((st) => {
       if (sound) playBeep();
       try {
@@ -112,7 +118,10 @@ export function RestTimerBar({ sound, defaultSeconds }: { sound: boolean; defaul
           {perm === "default" ? (
             <TimerButton
               label="Benachrichtigungen aktivieren"
-              onClick={async () => setPerm(await Notification.requestPermission())}
+              onClick={async () => {
+                await Notification.requestPermission();
+                setPermVersion((v) => v + 1);
+              }}
             >
               <Bell className="size-4" />
             </TimerButton>

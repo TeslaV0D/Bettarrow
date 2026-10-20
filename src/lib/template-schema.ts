@@ -1,7 +1,10 @@
 import { z } from "zod";
 
 const optInt = (min: number, max: number) =>
-  z.preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number().int().min(min).max(max).nullable());
+  z
+    .preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number().int().min(min).max(max).nullable())
+    .optional()
+    .transform((v) => v ?? null);
 
 export const templateItemSchema = z
   .object({

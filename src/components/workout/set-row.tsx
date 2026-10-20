@@ -15,15 +15,22 @@ export interface RowLayout {
   tracking: Tracking;
 }
 
-export function gridColumns(l: RowLayout): string {
+function columns(l: RowLayout, withEffort: boolean): string {
   // set | previous | weight | reps/time | effort | check
   const cols = ["2.25rem", "minmax(0,1fr)"];
   if (l.showWeight) cols.push("4.75rem");
   cols.push(l.tracking === "duration" ? "4.75rem" : "4rem");
-  if (l.showEffort) cols.push("3.25rem");
+  if (withEffort) cols.push("3.25rem");
   cols.push("2.75rem");
   return cols.join(" ");
 }
+
+/** Grid columns as CSS variables; the effort column is only shown inline from the `sm` breakpoint. */
+export function gridStyle(l: RowLayout): React.CSSProperties {
+  return { "--cols": columns(l, false), "--cols-sm": columns(l, l.showEffort) } as React.CSSProperties;
+}
+
+export const GRID_CLASS = "grid grid-cols-[var(--cols)] sm:grid-cols-[var(--cols-sm)]";
 
 function fmtWeight(kg: number | null, unit: WeightUnit) {
   return kg == null ? "" : formatNumber(kgToUnit(kg, unit), 2);
@@ -173,8 +180,8 @@ export const SetRow = memo(function SetRow({
 
   return (
     <div
-      className={cn("grid items-center gap-1.5 rounded-md px-1 py-1 transition-colors", done && "bg-accent-softer")}
-      style={{ gridTemplateColumns: gridColumns(layout) }}
+      className={cn(GRID_CLASS, "items-center gap-1.5 rounded-md px-1 py-1 transition-colors", done && "bg-accent-softer")}
+      style={gridStyle(layout)}
     >
       <Dropdown>
         <DropdownTrigger asChild>
@@ -276,6 +283,7 @@ export const SetRow = memo(function SetRow({
       )}
 
       {layout.showEffort ? (
+        <div className="hidden sm:block">
         <NumField
           value={effortMetric === "rpe" ? set.rpe : set.rir}
           format={fmtEffort}
@@ -286,6 +294,7 @@ export const SetRow = memo(function SetRow({
           inputMode="decimal"
           done={done}
         />
+        </div>
       ) : null}
 
       <button

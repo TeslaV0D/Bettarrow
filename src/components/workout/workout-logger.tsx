@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useReducer, useRef, useState } from "react";
 import { toast } from "sonner";
 import {
   AlertTriangle,
@@ -107,7 +107,9 @@ export function WorkoutLogger({
 
   // Stable callbacks for memoized children.
   const stateRef = useRef(state);
-  stateRef.current = state;
+  useLayoutEffect(() => {
+    stateRef.current = state;
+  }, [state]);
   const onUpdateSet = useCallback((exId: string, setId: string, patch: Partial<LSet>) => dispatch({ type: "updateSet", exId, setId, patch }), []);
   const onToggleSet = useCallback(
     (exId: string, setId: string) => {
@@ -404,6 +406,7 @@ export function WorkoutLogger({
       />
 
       <SetDetailsDialog
+        key={detailsFor ? detailsFor.setId : "none"}
         open={!!detailsSet}
         set={detailsSet}
         effortMetric={settings.effortMetric}
@@ -418,9 +421,10 @@ export function WorkoutLogger({
         onSave={(sec) => restFor && dispatch({ type: "setExerciseRest", exId: restFor, seconds: sec })}
       />
 
-      <RenameDialog open={renameOpen} name={state.name} onClose={() => setRenameOpen(false)} onSave={(name) => dispatch({ type: "setName", name })} />
+      <RenameDialog key={renameOpen ? "rename-open" : "rename-closed"} open={renameOpen} name={state.name} onClose={() => setRenameOpen(false)} onSave={(name) => dispatch({ type: "setName", name })} />
 
       <FinishDialog
+        key={finishOpen ? "finish-open" : "finish-closed"}
         open={finishOpen}
         onOpenChange={setFinishOpen}
         totals={totals}
@@ -508,16 +512,9 @@ function SetDetailsDialog({
   onClose: () => void;
   onSave: (patch: Partial<LSet>) => void;
 }) {
-  const [rir, setRir] = useState("");
-  const [rpe, setRpe] = useState("");
-  const [note, setNote] = useState("");
-  useEffect(() => {
-    if (set) {
-      setRir(set.rir?.toString().replace(".", ",") ?? "");
-      setRpe(set.rpe?.toString().replace(".", ",") ?? "");
-      setNote(set.note ?? "");
-    }
-  }, [set]);
+  const [rir, setRir] = useState(set?.rir?.toString().replace(".", ",") ?? "");
+  const [rpe, setRpe] = useState(set?.rpe?.toString().replace(".", ",") ?? "");
+  const [note, setNote] = useState(set?.note ?? "");
   const rirV = parseDecimal(rir);
   const rpeV = parseDecimal(rpe);
   const valid = rirV !== undefined && rpeV !== undefined && (rirV == null || rirV <= 10) && (rpeV == null || (rpeV >= 1 && rpeV <= 10));
@@ -600,9 +597,6 @@ function RestDialog({ open, current, onClose, onSave }: { open: boolean; current
 
 function RenameDialog({ open, name, onClose, onSave }: { open: boolean; name: string; onClose: () => void; onSave: (n: string) => void }) {
   const [value, setValue] = useState(name);
-  useEffect(() => {
-    if (open) setValue(name);
-  }, [open, name]);
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
@@ -645,9 +639,6 @@ function FinishDialog({
   const [text, setText] = useState(notes);
   const [policy, setPolicy] = useState<"discard" | "complete">("discard");
   const [busy, setBusy] = useState(false);
-  useEffect(() => {
-    if (open) setText(notes);
-  }, [open, notes]);
   const open_ = totals.totalSets - totals.completedSets;
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Check, Clock, Plus, Star } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { CatalogExercise } from "@/lib/exercise-search";
@@ -36,14 +36,14 @@ export function ExercisePicker({
 }) {
   const { filter, update, reset, results, maps } = useExerciseSearch(catalog, reference);
   const [selected, setSelected] = useState<string[]>([]);
-
-  useEffect(() => {
+  const [wasOpen, setWasOpen] = useState(open);
+  if (open !== wasOpen) {
+    setWasOpen(open);
     if (open) {
       setSelected([]);
-      update({ query: "" });
+      if (filter.query) update({ query: "" });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
+  }
 
   const byId = useMemo(() => new Map(catalog.map((e) => [e.id, e])), [catalog]);
   const showSuggestions = !filter.query && !filter.primary && !filter.favoritesOnly && !filter.equipment && !filter.secondary && !filter.pattern;

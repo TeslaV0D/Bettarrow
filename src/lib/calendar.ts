@@ -102,7 +102,7 @@ export const DISPLAY_STATUS_LABELS: Record<DisplayStatus, string> = {
   missed: "Nicht absolviert",
   skipped: "Ausgefallen",
   moved: "Verschoben",
-  rest: "Ruhetag",
+  rest: "Geplanter Ruhetag",
 };
 
 /**

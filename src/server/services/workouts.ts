@@ -15,7 +15,7 @@ import {
 } from "@/lib/training";
 import { todayIn, type YMD } from "@/lib/dates";
 import { syncPayloadSchema, type SyncResult } from "@/lib/workout-schema";
-import { materializeEntry } from "./calendar";
+import { getCalendarRange, materializeEntry } from "./calendar";
 
 export type WorkoutStatus = "active" | "completed" | "discarded";
 
@@ -191,6 +191,11 @@ export async function startWorkout(
       }
 
       const localDate = todayIn(ctx.timezone, now);
+
+      // Starting a template that is planned for today completes that plan entry automatically.
+      if (!plannedEntryId && templateId) {
+        plannedEntryId = await findPlannedEntryForToday(tx, templateId, localDate);
+      }
       const [bw] = await tx
         .select({ weightKg: s.bodyWeightEntries.weightKg })
         .from(s.bodyWeightEntries)
@@ -225,6 +230,16 @@ export async function startWorkout(
     }
     throw err;
   }
+}
+
+async function findPlannedEntryForToday(tx: DbOrTx, templateId: string, date: YMD): Promise<string | null> {
+  const range = await getCalendarRange(tx, date, date);
+  const match = range.entries.find((e) => e.kind === "workout" && e.status === "planned" && e.templateId === templateId);
+  if (!match) return null;
+  if (match.virtual) return materializeEntry(tx, match.id);
+  const linked = await tx.select({ id: s.workouts.id }).from(s.workouts).where(and(eq(s.workouts.plannedEntryId, match.id), ne(s.workouts.status, "discarded"))).limit(1);
+  if (linked.length) return null;
+  return materializeEntry(tx, match.id);
 }
 
 async function insertExercisesWithPrefill(

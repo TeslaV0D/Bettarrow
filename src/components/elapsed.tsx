@@ -1,7 +1,28 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 import { formatDuration } from "@/lib/format";
+
+/** Shared 1-second clock (one interval for all subscribers). */
+const listeners = new Set<() => void>();
+let timer: ReturnType<typeof setInterval> | null = null;
+function subscribe(cb: () => void) {
+  listeners.add(cb);
+  timer ??= setInterval(() => listeners.forEach((l) => l()), 1000);
+  return () => {
+    listeners.delete(cb);
+    if (listeners.size === 0 && timer) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
+}
+const getNow = () => Math.floor(Date.now() / 1000);
+const getServerNow = () => null;
+
+export function useNowSeconds(): number | null {
+  return useSyncExternalStore(subscribe, getNow, getServerNow);
+}
 
 /** Live elapsed time of a workout (excluding pauses). Uses timestamps, not tick counting. */
 export function Elapsed({
@@ -15,18 +36,10 @@ export function Elapsed({
   pausedSeconds: number;
   className?: string;
 }) {
-  const [now, setNow] = useState<number | null>(null);
-  useEffect(() => {
-    setNow(Date.now());
-    if (pausedAt) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [pausedAt]);
-  const end = pausedAt ? new Date(pausedAt).getTime() : (now ?? new Date(startedAt).getTime());
-  const secs = Math.max(0, Math.floor((end - new Date(startedAt).getTime()) / 1000) - pausedSeconds);
-  return (
-    <span className={className} suppressHydrationWarning>
-      {now == null && !pausedAt ? "–:–" : formatDuration(secs, true)}
-    </span>
-  );
+  const now = useNowSeconds();
+  const start = new Date(startedAt).getTime() / 1000;
+  const end = pausedAt ? new Date(pausedAt).getTime() / 1000 : now;
+  if (end == null) return <span className={className}>–:–</span>;
+  const secs = Math.max(0, Math.floor(end - start) - pausedSeconds);
+  return <span className={className}>{formatDuration(secs, true)}</span>;
 }

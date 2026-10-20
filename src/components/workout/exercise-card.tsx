@@ -10,7 +10,7 @@ import { isBodyweightMode, weightInputLabel } from "@/lib/training";
 import type { LExercise, LSet } from "@/lib/workout-reducer";
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownContent, DropdownItem, DropdownSeparator, DropdownTrigger } from "@/components/ui/dropdown";
-import { SetRow, gridColumns, type RowLayout } from "./set-row";
+import { GRID_CLASS, SetRow, gridStyle, type RowLayout } from "./set-row";
 
 export interface ExerciseCardProps {
   ex: LExercise;
@@ -139,18 +139,18 @@ export const ExerciseCard = memo(function ExerciseCard(p: ExerciseCardProps) {
 
       <div className="px-2 pb-2 pt-2 sm:px-3">
         <div
-          className="grid gap-1.5 px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-subtle"
-          style={{ gridTemplateColumns: gridColumns(layout) }}
+          className={cn(GRID_CLASS, "gap-1.5 px-1 pb-1 text-[11px] font-medium uppercase tracking-wide text-subtle")}
+          style={gridStyle(layout)}
           aria-hidden
         >
           <span className="text-center">Satz</span>
           <span>
             Vorher
-            {ex.previous ? <span className="normal-case tracking-normal"> · {formatDay(ex.previous.date, "dayMonth")}</span> : null}
+            {ex.previous ? <span className="hidden normal-case tracking-normal sm:inline"> · {formatDay(ex.previous.date, "dayMonth")}</span> : null}
           </span>
           {layout.showWeight ? <span className="text-center">{layout.weightEditable ? wLabel?.replace("kg", unit) : unit}</span> : null}
           <span className="text-center">{ex.tracking === "duration" ? "Zeit" : "Wdh."}</span>
-          {layout.showEffort ? <span className="text-center">{effortMetric.toUpperCase()}</span> : null}
+          {layout.showEffort ? <span className="hidden text-center sm:block">{effortMetric.toUpperCase()}</span> : null}
           <span />
         </div>
         <div className="space-y-0.5">

@@ -266,3 +266,5 @@ export async function endRule(db: Db, id: string, today: YMD, yesterday: YMD): P
 }
 
 export type { PlanRuleLike };
+
+export type { CalendarEntry };
