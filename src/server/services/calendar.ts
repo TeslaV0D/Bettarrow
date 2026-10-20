@@ -242,7 +242,7 @@ async function deleteRuleTx(tx: DbOrTx, id: string, today: YMD): Promise<void> {
           eq(s.plannedEntries.ruleId, id),
           gte(s.plannedEntries.date, today),
           inArray(s.plannedEntries.status, ["planned", "cancelled", "skipped"]),
-          sql`not exists (select 1 from ${s.workouts} w where w.planned_entry_id = ${s.plannedEntries.id})`,
+          sql`not exists (select 1 from ${s.workouts} w where w.planned_entry_id = "planned_entries"."id")`,
         ),
       );
     await tx.delete(s.planRules).where(eq(s.planRules.id, id));

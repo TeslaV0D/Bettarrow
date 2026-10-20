@@ -23,7 +23,7 @@ ENV NODE_ENV=production \
     PORT=3000 \
     HOSTNAME=0.0.0.0 \
     BACKUP_DIR=/backups
-RUN apk add --no-cache tini \
+RUN apk add --no-cache tini su-exec \
  && addgroup -S app -g 1001 && adduser -S app -u 1001 -G app \
  && mkdir -p /backups && chown app:app /backups
 COPY --from=build --chown=app:app /app/.next/standalone ./
@@ -31,9 +31,9 @@ COPY --from=build --chown=app:app /app/.next/static ./.next/static
 COPY --from=build --chown=app:app /app/public ./public
 COPY --from=build --chown=app:app /app/drizzle ./drizzle
 COPY --from=build --chown=app:app /app/scripts/hash-password.mjs ./scripts/hash-password.mjs
-USER app
+COPY --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 EXPOSE 3000
 HEALTHCHECK --interval=30s --timeout=5s --start-period=40s --retries=3 \
   CMD node -e "fetch('http://127.0.0.1:'+(process.env.PORT||3000)+'/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
-ENTRYPOINT ["/sbin/tini", "--"]
+ENTRYPOINT ["/sbin/tini", "--", "docker-entrypoint.sh"]
 CMD ["node", "server.js"]

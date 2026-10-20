@@ -46,7 +46,7 @@ export async function loadPrefill(
   const conditions = [
     eq(s.workouts.status, "completed"),
     inArray(s.workoutExercises.exerciseId, ids),
-    sql`exists (select 1 from ${s.workoutSets} ws where ws.workout_exercise_id = ${s.workoutExercises.id} and ws.completed)`,
+    sql`exists (select 1 from ${s.workoutSets} ws where ws.workout_exercise_id = "workout_exercises"."id" and ws.completed)`,
   ];
   if (opts.excludeWorkoutId) conditions.push(ne(s.workouts.id, opts.excludeWorkoutId));
   if (opts.before) conditions.push(lt(s.workouts.startedAt, opts.before));
@@ -167,7 +167,7 @@ export async function startWorkout(
           .select({
             exerciseId: s.workoutExercises.exerciseId,
             restSeconds: s.workoutExercises.restSeconds,
-            setCount: sql<number>`(select count(*)::int from ${s.workoutSets} ws where ws.workout_exercise_id = ${s.workoutExercises.id} and ws.completed and ws.set_type <> 'warmup')`,
+            setCount: sql<number>`(select count(*)::int from ${s.workoutSets} ws where ws.workout_exercise_id = "workout_exercises"."id" and ws.completed and ws.set_type <> 'warmup')`,
           })
           .from(s.workoutExercises)
           .where(eq(s.workoutExercises.workoutId, input.repeatWorkoutId))
@@ -589,7 +589,7 @@ export async function finishWorkout(
         .where(
           and(
             eq(s.workoutExercises.workoutId, id),
-            sql`not exists (select 1 from ${s.workoutSets} ws where ws.workout_exercise_id = ${s.workoutExercises.id})`,
+            sql`not exists (select 1 from ${s.workoutSets} ws where ws.workout_exercise_id = "workout_exercises"."id")`,
           ),
         );
     }

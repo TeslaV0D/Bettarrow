@@ -60,11 +60,11 @@ export async function getStartOptionsAction() {
         .select({
           id: s.templates.id,
           name: s.templates.name,
-          exerciseCount: sql<number>`(select count(*)::int from ${s.templateExercises} te where te.template_id = ${s.templates.id})`,
-          lastUsed: sql<string | null>`(select max(w.local_date)::text from ${s.workouts} w where w.template_id = ${s.templates.id} and w.status = 'completed')`,
+          exerciseCount: sql<number>`(select count(*)::int from ${s.templateExercises} te where te.template_id = "templates"."id")`,
+          lastUsed: sql<string | null>`(select max(w.local_date)::text from ${s.workouts} w where w.template_id = "templates"."id" and w.status = 'completed')`,
         })
         .from(s.templates)
-        .orderBy(desc(sql`(select max(w.started_at) from ${s.workouts} w where w.template_id = ${s.templates.id} and w.status = 'completed') nulls last`), s.templates.name),
+        .orderBy(sql`(select max(w.started_at) from ${s.workouts} w where w.template_id = "templates"."id" and w.status = 'completed') desc nulls last`, s.templates.name),
     ]);
     return {
       planned: range.entries
