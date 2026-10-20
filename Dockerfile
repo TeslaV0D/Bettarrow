@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1.7
 # ---------------------------------------------------------------------------
 # Bettarrow production image
 #   - Next.js standalone server (no node_modules on the host, no host Node.js)
