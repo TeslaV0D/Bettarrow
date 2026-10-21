@@ -15,18 +15,20 @@ Keine Cloud, kein Tracking, keine externen Schriften oder APIs zur Laufzeit.
 
 ## Schnellstart
 
-Voraussetzungen: Docker mit Compose-Plugin (v2), ca. 512 MB RAM im Betrieb. Der einmalige Image-Build braucht kurzzeitig mehr.
+Voraussetzungen: Docker mit Compose-Plugin (v2), ca. 512 MB RAM. Gebaut wird nichts auf dem Server: Das fertige Image kommt aus der GitHub Container Registry.
 
-- **Portainer (Git-Stack):** siehe [Erstes Deployment mit Portainer](#erstes-deployment-mit-portainer-git-stack).
+- **Portainer CE (empfohlen):** siehe [Erstes Deployment mit Portainer](#erstes-deployment-mit-portainer-ce).
 - **Docker Compose direkt:**
 
 ```bash
-git clone <repo-url> bettarrow && cd bettarrow
-cp .env.example .env && chmod 600 .env
-python3 scripts/hash-password.py   # Ausgabe bei APP_PASSWORD_HASH in .env eintragen
-openssl rand -hex 24               # als POSTGRES_PASSWORD in .env eintragen
-docker compose up -d               # baut das Image, migriert, startet
-docker compose ps                  # db + web "healthy", migrate "exited (0)"
+mkdir -p /opt/bettarrow && cd /opt/bettarrow
+curl -fsSLO https://raw.githubusercontent.com/TeslaV0D/Bettarrow/main/compose.yaml
+curl -fsSL  https://raw.githubusercontent.com/TeslaV0D/Bettarrow/main/.env.example -o .env && chmod 600 .env
+curl -fsSLO https://raw.githubusercontent.com/TeslaV0D/Bettarrow/main/scripts/hash-password.py
+python3 hash-password.py   # Ausgabe bei APP_PASSWORD_HASH in .env eintragen
+openssl rand -hex 24       # als POSTGRES_PASSWORD in .env eintragen
+docker compose up -d       # zieht das Image, migriert, startet
+docker compose ps          # db + web "healthy", migrate "exited (0)"
 ```
 
 Danach ist die App unter `http://<server-ip>:3000` erreichbar (Port über `APP_PORT`).
@@ -35,7 +37,21 @@ Danach ist die App unter `http://<server-ip>:3000` erreichbar (Port über `APP_P
 
 ## Deployment
 
-Bettarrow läuft vollständig in Docker: ein Stack aus drei Services in `compose.yaml`. Node.js auf dem Host ist nicht nötig, eine Registry oder CI auch nicht. Das Image wird beim Deployment direkt aus dem Repository gebaut.
+### Überblick: drei getrennte Zustände
+
+```
+git push main ──► GitHub Actions ──► ghcr.io/teslav0d/bettarrow:{sha-<commit>, main} ──► Portainer-Redeploy ──► laufender Stack
+ (Repository)     (Tests + Build)     (Image in der Registry)                             (manuell)            (Server)
+```
+
+> **Repository ≠ Image ≠ laufender Stack.**
+> - Ein `git push` ändert nur das Repository.
+> - Ein grüner Workflow veröffentlicht nur ein Image.
+> - Erst ein Redeploy in Portainer ersetzt die Container auf dem Server.
+>
+> Welche Version wirklich läuft, zeigt `GET /api/health`: `{"status":"ok","version":"1.2.0","revision":"<commit-sha>"}`.
+
+Der Stack in `compose.yaml` besteht aus drei Services:
 
 | Service | Aufgabe | Lebensdauer |
 | --- | --- | --- |
@@ -43,22 +59,55 @@ Bettarrow läuft vollständig in Docker: ein Stack aus drei Services in `compose
 | `migrate` (`bettarrow-migrate`) | wendet Migrationen + Übungsdatenbank an, beendet sich danach | einmalig pro Deployment, Exit-Code 0 = Erfolg |
 | `web` (`bettarrow-web`) | die App, Port `APP_PORT` (Standard 3000) | dauerhaft, startet erst nach erfolgreichem `migrate` |
 
-Start-Reihenfolge: `db` healthy → `migrate` läuft durch → `web` startet.
-- Schlägt `migrate` fehl, startet `web` nicht. Eine halb migrierte App wird also nie ausgeliefert.
-- Migrationen laufen immer genau einmal in genau einem Container, zusätzlich abgesichert durch einen PostgreSQL-Advisory-Lock.
-- `web` migriert selbst nicht. Ist das Schema nicht aktuell, verweigert die App den Start mit einer klaren Meldung im Log.
+`migrate` und `web` laufen aus demselben Image, also immer in derselben Version. Start-Reihenfolge: `db` healthy → `migrate` läuft durch → `web` startet.
 
-> **Wichtig: Repository ≠ Image ≠ laufender Stack.** Ein `git push` ändert nur das Repository. Erst ein (Re-)Deployment in Portainer bzw. `docker compose up -d` baut daraus ein neues Image und ersetzt die laufenden Container. Ob eine Version wirklich läuft, zeigt nur der Stack selbst: Container-Status `healthy` und `GET /api/health`.
+- **Migrationen sind kontrolliert.** Sie laufen pro Deployment genau einmal in genau einem Container, zusätzlich abgesichert durch einen PostgreSQL-Advisory-Lock.
+- **Kein Start auf halbem Schema.** Schlägt `migrate` fehl, startet `web` nicht. `web` migriert selbst nicht: Ist das Schema älter als das Image, verweigert die App den Start mit einer klaren Meldung im Log.
+- **Healthcheck.** `/api/health` führt eine echte Datenbankabfrage aus. Docker prüft den Endpunkt im Container alle 30 s. Antwortet die DB nicht, liefert er `503` und der Container wird `unhealthy`.
+
+### CI: GitHub Actions → GHCR
+
+Der Workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) hat zwei Jobs.
+
+**Job `checks`** läuft bei jedem Pull Request auf `main` und jedem Push auf `main`:
+- `npm run typecheck`, `npm run lint`
+- `npm run test:unit`, `npm run test:integration` (gegen einen PostgreSQL-16-Service)
+- Produktionsbuild: `npm run build` und `npm run build:migrate`
+
+**Job `image`** läuft nur, wenn `checks` grün ist:
+1. Baut das Docker-Image.
+2. Startet damit den echten Stack aus `compose.yaml` und prüft: `migrate` exit 0, `web` healthy, `/api/health` meldet den richtigen Commit.
+3. Führt die Playwright-E2E-Tests (`npm run test:e2e`) gegen den Container aus.
+4. **Nur bei Push auf `main`:** veröffentlicht genau dieses getestete Image als
+   - `ghcr.io/teslav0d/bettarrow:sha-<7-stelliger Commit>`: unveränderlich, eindeutig pro Commit
+   - `ghcr.io/teslav0d/bettarrow:main`: zeigt immer auf den neuesten erfolgreichen Build von `main`
+
+Sicherheit:
+- Das `GITHUB_TOKEN` hat global nur `contents: read`. Nur der Image-Job bekommt zusätzlich `packages: write`, und gepusht wird nur auf `main`.
+- Es werden keine weiteren Secrets benötigt. Die Test-Passwörter erzeugt der Workflow bei jedem Lauf zufällig.
+- Läufe auf `main` werden nacheinander abgearbeitet, nicht abgebrochen. Dadurch landet `:main` immer auf dem neuesten Commit.
+
+Das Image ist für `linux/amd64` gebaut (übliche x86-Server). Für einen ARM-Server (z. B. Raspberry Pi) müsste der Workflow um `docker/setup-qemu-action` und `platforms: linux/amd64,linux/arm64` erweitert werden.
+
+**Sichtbarkeit des Pakets.** Pakete, die ein Workflow mit dem `GITHUB_TOKEN` anlegt, übernehmen laut GitHub-Doku die Sichtbarkeit des Repositorys. Bei diesem öffentlichen Repo ist das Paket damit öffentlich, und Portainer kann es **ohne Zugangsdaten** ziehen.
+- Nach dem ersten Lauf prüfen: GitHub → Profil → *Packages* → `bettarrow` → *Package settings* → *Danger Zone*: „Public“.
+- Ist das Paket privat: in Portainer unter *Registries → Add registry → Custom registry* `ghcr.io` mit GitHub-Benutzer und einem *Personal Access Token (classic)* mit nur `read:packages` anlegen.
 
 ### Variablen
 
-Secrets gehören **nie** ins Repository. `.env` ist in `.gitignore` und `.dockerignore` eingetragen. Alle Variablen sind in [`.env.example`](.env.example) dokumentiert.
+Secrets gehören **nie** ins Repository:
+- `.env*` steht in `.gitignore` (Ausnahme: `.env.example`) und in `.dockerignore`.
+- Der Workflow braucht keine eigenen Secrets.
+- Alle Variablen sind in [`.env.example`](.env.example) dokumentiert.
 
 | Variable | Pflicht | Standard | Beschreibung |
 | --- | --- | --- | --- |
 | `POSTGRES_PASSWORD` | **ja** | – | Datenbank-Passwort, nur intern genutzt. Erzeugen z. B. mit `openssl rand -hex 24`. Sonderzeichen sind erlaubt. |
 | `APP_PASSWORD_HASH` | **ja¹** | – | scrypt-Hash des Login-Passworts, siehe unten. Enthält kein `$` und lässt sich direkt einfügen. |
 | `APP_PASSWORD` | ja¹ | – | Alternative: Klartext-Passwort (min. 8 Zeichen). Wird ignoriert, wenn ein Hash gesetzt ist. |
+| `BETTARROW_TAG` | nein | `main` | Image-Tag: `main` folgt der neuesten Version, `sha-<commit>` pinnt eine bestimmte Version (Rollback). |
+| `BETTARROW_IMAGE` | nein | `ghcr.io/teslav0d/bettarrow` | Image ohne Tag, z. B. für einen Fork. |
+| `BETTARROW_PULL_POLICY` | nein | `always` | `always` = bei jedem Deployment auf ein neueres Image prüfen. `never` nur für lokal gebaute Images. |
 | `APP_PORT` | nein | `3000` | Port auf dem Host. |
 | `APP_BIND` | nein | `0.0.0.0` | `127.0.0.1`, wenn nur ein lokaler Reverse Proxy zugreifen soll. |
 | `DEFAULT_TIMEZONE` | nein | `Europe/Berlin` | Start-Zeitzone (später im Profil änderbar). |
@@ -73,91 +122,86 @@ Secrets gehören **nie** ins Repository. `.env` ist in `.gitignore` und `.docker
 
 **In Portainer müssen nur `POSTGRES_PASSWORD` und `APP_PASSWORD_HASH` gesetzt werden.** Alles andere ist optional.
 
-**Passwort-Hash erzeugen.** Die Eingabe ist verdeckt, das Ergebnis ist eine Zeile `APP_PASSWORD_HASH=scrypt:…`. Drei Wege, je nachdem was gerade verfügbar ist:
+**Passwort-Hash erzeugen.** Die Eingabe ist verdeckt, das Ergebnis ist eine Zeile `APP_PASSWORD_HASH=scrypt:…`:
 
 ```bash
-python3 scripts/hash-password.py                          # nur Python 3 (z. B. Ubuntu-Host), kein Node nötig
+python3 scripts/hash-password.py                               # nur Python 3 (z. B. Ubuntu-Host), keine Abhängigkeiten
 docker exec -it bettarrow-web node scripts/hash-password.mjs   # im laufenden Container (z. B. Passwortwechsel)
-npm run hash-password                                     # Entwicklungs-Checkout
+npm run hash-password                                          # Entwicklungs-Checkout
 ```
 
-Ohne Checkout auf dem Host reicht die einzelne Datei `scripts/hash-password.py` (aus GitHub herunterladen), sie hat keine Abhängigkeiten.
+### Erstes Deployment mit Portainer CE
 
-### Erstes Deployment mit Portainer (Git-Stack)
+Getestet mit **Portainer CE 2.45.2** (Docker-Standalone-Umgebung). Benötigt werden nur CE-Funktionen: Git-Stacks, Umgebungsvariablen und Named Volumes.
 
-Getestet mit **Portainer CE 2.45.2** (Docker-Standalone-Umgebung, Ubuntu-Host). Benötigt werden Git-Stacks mit `build:`-Unterstützung, Umgebungsvariablen und Named Volumes. Das alles ist in Portainer CE enthalten.
-
-1. **Portainer bereit?** Neuere Versionen (getestet: 2.45.2) verlangen bei der Ersteinrichtung ein Setup-Token. Es steht in `docker logs portainer`.
-2. **Zugriff auf das Repository.** Ist das Repo privat, in GitHub einen *Fine-grained Personal Access Token* anlegen: nur dieses Repository, Berechtigung *Contents: Read-only*. Den Token nur in Portainer eintragen, nirgendwo committen.
+1. **Image vorhanden?** In GitHub unter *Actions* muss der Workflow „CI“ für den gewünschten Commit auf `main` grün sein. Die Zusammenfassung des Laufs listet die veröffentlichten Tags.
+2. **Portainer bereit?** Neuere Versionen (getestet: 2.45.2) verlangen bei der Ersteinrichtung ein Setup-Token aus `docker logs portainer`.
 3. **Stack anlegen:** *Stacks → Add stack*
    - Name: `bettarrow`
    - Build method: **Repository**
-   - Repository URL: `https://github.com/<owner>/Bettarrow`
-   - Authentication: aktivieren, Benutzername + Token (nur bei privatem Repo)
-   - Repository reference: `refs/heads/main` (bzw. der Branch, den der Server verfolgen soll) oder ein Tag wie `refs/tags/v1.0.0`
+   - Repository URL: `https://github.com/TeslaV0D/Bettarrow` (öffentlich, keine Authentifizierung nötig)
+   - Repository reference: `refs/heads/main`
    - Compose path: `compose.yaml`
-   - Environment variables: `POSTGRES_PASSWORD` und `APP_PASSWORD_HASH` eintragen, optional `APP_PORT` usw. Alternativ eine lokal ausgefüllte Kopie von `.env.example` per *Load variables from .env file* hochladen.
+   - Environment variables: `POSTGRES_PASSWORD` und `APP_PASSWORD_HASH`, optional `APP_PORT` usw. Alternativ eine lokal ausgefüllte Kopie von `.env.example` per *Load variables from .env file* hochladen.
    - *GitOps updates*: aus lassen (siehe [Updates](#updates)).
-4. **Deploy the stack.** Portainer klont das Repository und baut das Image auf dem Host. Der erste Build dauert einige Minuten.
+4. **Deploy the stack.** Portainer holt `compose.yaml` aus dem Repository und zieht das Image aus GHCR.
 5. **Prüfen** (Portainer → *Containers*):
    - `bettarrow-db`: running, healthy
    - `bettarrow-migrate`: **exited (0)**. Das ist gewollt, der Job ist fertig. Log endet mit `[migrate] database is up to date`.
    - `bettarrow-web`: running, healthy
-   - `http://<server-ip>:<APP_PORT>/api/health` liefert `{"status":"ok"}`; danach unter `http://<server-ip>:<APP_PORT>` anmelden.
+   - `http://<server-ip>:<APP_PORT>/api/health` liefert `status: ok` und die Commit-`revision`. Danach unter `http://<server-ip>:<APP_PORT>` anmelden.
 
-Hinweise zu Portainer:
-- Keine relativen Bind-Mounts. Relative Pfade wie `./backups` funktionieren bei Git-Stacks in Portainer CE nicht zuverlässig (*relative path volumes* sind eine Business-Edition-Funktion). Deshalb arbeitet `compose.yaml` nur mit Named Volumes. Wer die Backups als Ordner auf dem Host will, setzt `BACKUP_PATH` auf einen **absoluten** Pfad.
-- Volumes und Container haben feste Namen (`bettarrow-*`), unabhängig vom Stack-Namen. Deshalb läuft pro Docker-Host nur eine Instanz.
+Ein *Web-editor*-Stack mit dem Inhalt von `compose.yaml` funktioniert ebenfalls, auch das ist getestet. Der Git-Stack hat den Vorteil, dass Änderungen an `compose.yaml` beim Redeploy automatisch mitkommen.
+
+Hinweise:
+- Keine relativen Bind-Mounts: *Relative path volumes* sind in Portainer eine Business-Edition-Funktion. `compose.yaml` arbeitet deshalb nur mit Named Volumes. Wer die Backups als Ordner auf dem Host will, setzt `BACKUP_PATH` auf einen **absoluten** Pfad.
+- Container und Volumes haben feste Namen (`bettarrow-*`), unabhängig vom Stack-Namen. Deshalb läuft pro Docker-Host nur eine Instanz.
 - Logs: Portainer → Container → *Logs*, bzw. `docker logs bettarrow-web`.
-
-### Alternative ohne Portainer-Git-Stack
-
-Wenn Git-Stacks oder Image-Builds in der vorhandenen Portainer-Umgebung nicht verfügbar sind, z. B. bei einem Agent ohne Build-Rechte:
-
-**Docker Compose direkt auf dem Host.** Das ist die einfachste Variante, der Stack erscheint in Portainer trotzdem als „limited“:
-
-```bash
-git clone https://github.com/<owner>/Bettarrow.git /opt/bettarrow && cd /opt/bettarrow
-cp .env.example .env && chmod 600 .env    # POSTGRES_PASSWORD und APP_PASSWORD_HASH eintragen
-docker compose up -d                      # baut das Image, migrate läuft, web startet
-docker compose ps
-```
-
-**Image auf dem Host bauen + Web-Editor-Stack:**
-1. `docker build -t bettarrow-web:local .` im Checkout ausführen.
-2. Inhalt von `compose.yaml` in Portainer als *Web editor*-Stack einfügen.
-3. Dort bei `x-app-image` den Block `build:` entfernen und `pull_policy: never` setzen.
-
-Updates bedeuten dann: neu bauen, danach den Stack in Portainer *Update the stack*.
 
 ### Updates
 
+So erkennt Portainer CE ein neues Image zuverlässig: **Portainer CE fragt die Registry nicht von selbst ab.** Ein neues Image kommt nur bei einem Redeploy auf den Server. Damit das dann sicher passiert, steht in `compose.yaml` `pull_policy: always`:
+- Jeder Redeploy fragt GHCR nach dem aktuellen Digest von `:main` und lädt ein neueres Image.
+- Das funktioniert auch, wenn sich am Git-Stand nichts geändert hat.
+- Der CE-Schalter *Re-pull image* wird dafür nicht gebraucht.
+
 Ablauf für jede neue Version:
 
-1. **Backup** der Datenbank (siehe [Datenbank-Dump](#2-datenbank-dump-pg_dump)). Migrationen laufen nur vorwärts.
-2. Änderungen auf den Branch pushen, den der Stack verfolgt. *Das ist noch kein Deployment.*
-3. **Portainer:** *Stacks → bettarrow → Editor → Pull and redeploy*. Mit **Docker Compose:** `git pull && docker compose up -d`.
-   - Portainer holt den neuen Stand des Repositorys.
-   - Wegen `pull_policy: build` wird das Image **neu gebaut**.
-   - `migrate` läuft erneut und spielt neue Migrationen ein.
+1. Änderung auf `main` pushen bzw. mergen. *Das ist noch kein Deployment.*
+2. Warten, bis der Workflow „CI“ grün ist. Erst dann gibt es das neue Image. Ein Redeploy vorher würde nur das alte `:main` erneut ziehen.
+3. **Backup** der Datenbank (siehe [Datenbank-Dump](#2-datenbank-dump-pg_dump)). Migrationen laufen nur vorwärts.
+4. **Portainer:** *Stacks → bettarrow → Pull and redeploy* (Git-Stack) bzw. *Update the stack* (Web-Editor). **Compose:** `docker compose up -d`. Dabei passiert Folgendes:
+   - Das neue Image wird gezogen.
+   - `migrate` läuft und spielt neue Migrationen ein.
    - `web` wird ersetzt.
-   - Die Daten in den Volumes bleiben unverändert.
-4. **Kontrollieren:** `bettarrow-migrate` exited (0), `bettarrow-web` healthy, `/api/health` ok. Erst dann ist die neue Version deployt.
+   - Die Volumes bleiben unverändert.
+5. **Kontrollieren:** `bettarrow-migrate` exited (0), `bettarrow-web` healthy, und `/api/health` meldet als `revision` den erwarteten Commit. Erst dann ist die neue Version deployt.
+
+Schlägt der Image-Pull fehl (GHCR nicht erreichbar, Tag existiert nicht), bricht Portainer das Deployment mit einer Fehlermeldung ab. Der laufende Stack bleibt dabei unverändert in Betrieb.
 
 Von dir bearbeitete Standardübungen werden bei Updates **nicht** überschrieben.
 
-**Automatische Updates?** Nicht zuverlässig in Portainer CE, daher ist der manuelle Redeploy der dokumentierte Weg.
-- *GitOps updates* mit Polling lassen sich in CE zwar einschalten. Im Test mit CE 2.45.2 hat das Polling aber auch nach mehreren Intervallen keinen Redeploy ausgelöst.
-- Webhooks, *Force redeployment* und *Re-pull image* sind laut Portainer-Oberfläche Business-Edition-Funktionen.
-
-Mit Portainer BE kann man GitOps-Polling oder einen Webhook (z. B. aus einem GitHub-Workflow) nutzen. Dafür ist im Repository nichts zu ändern.
+**Automatisches Deployment** ist bewusst nicht eingerichtet. Optionen für später:
+- **GitOps-Polling (CE):** Im Test mit CE 2.45.2 hat es keinen Redeploy ausgelöst. Außerdem reagiert es auf Git-Commits, nicht auf Images. Es würde also mit dem laufenden CI-Build konkurrieren und eventuell noch das alte Image ziehen.
+- **Stack-Webhooks / Image-Polling:** laut Portainer-Oberfläche Business-Edition-Funktionen. Ein Webhook müsste aus GitHub erreichbar sein, also öffentlich. Ohne zusätzliche Absicherung (VPN, Reverse Proxy mit Auth) ist das nicht empfehlenswert.
+- **Container-Updater wie Watchtower:** ersetzen nur einzelne Container und umgehen den `migrate`-Job. Bei Schemaänderungen würde `web` dann nicht starten.
 
 ### Rollback
 
-1. **Code zurück:** Im Stack-Editor die *Repository reference* auf den vorherigen Stand stellen, z. B. ein Tag `refs/tags/v1.0.0`, dann *Pull and redeploy*. Mit Compose: `git checkout v1.0.0 && docker compose up -d`. Getestet: Rollback auf ein Tag und zurück, Daten bleiben erhalten.
-2. **Datenbank zurück**, nur nötig, wenn die neuere Version eine Migration eingespielt hat: Den vor dem Update erstellten Dump wiederherstellen (siehe [Wiederherstellung](#2-datenbank-dump-pg_dump)). Eine ältere App-Version startet zwar auf einem neueren Schema, ist aber nicht dafür gebaut.
+1. **App zurück:** In Portainer die Variable `BETTARROW_TAG` auf den Commit-Tag der vorherigen Version setzen, z. B. `sha-1a2b3c4`, dann *Pull and redeploy* bzw. *Update the stack*. Die Tags stehen unter GitHub → *Packages* → `bettarrow` und in der Zusammenfassung jedes CI-Laufs. Zurück zur aktuellen Version: Variable entfernen oder auf `main` setzen.
+2. **Datenbank zurück**, nur nötig, wenn die neuere Version eine Migration eingespielt hat: den vor dem Update erstellten Dump wiederherstellen (siehe [Wiederherstellung](#2-datenbank-dump-pg_dump)). Eine ältere App-Version startet zwar auf einem neueren Schema, ist aber nicht dafür gebaut.
 
-Tipp: Jede deployte Version taggen (`git tag v1.1.0 && git push origin v1.1.0`). Dann ist ein Rollback nur ein Wechsel der Referenz.
+Getestet: Rollback per `BETTARROW_TAG` und zurück, die Daten bleiben erhalten.
+
+### Lokal bauen statt GHCR
+
+Für Entwicklung, zum Testen vor dem Push oder wenn GHCR nicht erreichbar ist:
+
+```bash
+git clone https://github.com/TeslaV0D/Bettarrow.git && cd Bettarrow
+cp .env.example .env && chmod 600 .env    # POSTGRES_PASSWORD und APP_PASSWORD_HASH eintragen
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
 
 ### Persistenz
 
@@ -166,7 +210,9 @@ Tipp: Jede deployte Version taggen (`git tag v1.1.0 && git push origin v1.1.0`).
 | `bettarrow-db-data` | PostgreSQL-Datenbank (alle Daten) |
 | `bettarrow-backups` (oder `BACKUP_PATH`) | automatische JSON-Backups (`bettarrow-*.json.gz`) |
 
-Getestet: Container ersetzen, Neustart, Update, Rollback, `docker compose down` + `up` und sogar *Stack löschen* + neu anlegen behalten die Daten.
+- Die Volumes haben feste Namen und gehören zu keinem Container. Ein neues App-Image, ein Redeploy, Rollback, Neustart, `docker compose down` und sogar *Stack löschen* + neu anlegen lassen sie unverändert.
+- `web` und `migrate` schreiben nicht in `bettarrow-db-data`. Nur der `db`-Container mountet es, und dessen Image (`postgres:16-alpine`) ist vom App-Image unabhängig.
+- Getestet: Image-Update per Redeploy, Rollback, Stack löschen und neu anlegen. Die Daten blieben jeweils erhalten.
 
 > **Achtung:** Gelöscht werden die Daten nur, wenn **das Volume selbst** entfernt wird: `docker compose down -v`, `docker volume rm bettarrow-db-data` oder in Portainer unter *Volumes → Remove*. Vorher immer ein Backup ziehen.
 
@@ -295,9 +341,11 @@ npm run dev             # http://localhost:3000
 | `npm run lint` | ESLint |
 | `npm test` | Unit- und Integrationstests (Integration braucht PostgreSQL, `TEST_DATABASE_URL`, Standard `postgres://bettarrow:bettarrow@localhost:5432/bettarrow_test`) |
 | `npm run test:e2e` | Playwright-E2E gegen eine laufende Instanz (`E2E_BASE_URL`, `E2E_PASSWORD`; leere Datenbank verwenden) |
-| `npm run build` | Produktionsbuild |
+| `npm run build` | Produktionsbuild (`npm run build:migrate` bündelt zusätzlich den Migrations-Job) |
 | `npm run db:generate` | neue Migration aus Schemaänderungen erzeugen (`drizzle/`) |
 | `npx tsx scripts/dev-demo-data.ts` | **nur Entwicklung**: füllt eine leere DB mit 12 Wochen Beispieltraining |
+
+CI (`.github/workflows/ci.yml`) führt dieselben Befehle bei jedem Pull Request und Push auf `main` aus.
 
 Weitere Dokumentation: [ARCHITECTURE.md](ARCHITECTURE.md) · [IMPLEMENTATION.md](IMPLEMENTATION.md) · [CHANGELOG.md](CHANGELOG.md) · [docs/EXPORT_FORMAT.md](docs/EXPORT_FORMAT.md)
 

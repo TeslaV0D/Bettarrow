@@ -52,7 +52,9 @@ src/
   proxy.ts              Cookie-Gate (Weiterleitung zum Login); Sicherheitsgrenze ist der Server-Code
 drizzle/                SQL-Migrationen
 scripts/                hash-password.mjs/.py, migrate.ts (→ dist/migrate.mjs), backup-db.sh, restore-db.sh, dev-demo-data.ts
-compose.yaml            Stack für Docker Compose und Portainer (db, migrate, web)
+compose.yaml            Stack für Docker Compose und Portainer (db, migrate, web), Image aus GHCR
+compose.build.yaml      Override: Image lokal bauen statt ziehen
+.github/workflows/      CI: Tests, Build, Image-Smoke-/E2E-Test, Veröffentlichung nach GHCR
 tests/                  unit/, integration/, e2e/
 ```
 
@@ -119,12 +121,18 @@ Definiert in `src/lib/training.ts` (die SQL-Variante in `services/stats.ts` wird
 ```
 compose.yaml (Projekt "bettarrow")
   db       postgres:16-alpine  ── Volume bettarrow-db-data, kein Host-Port, Healthcheck pg_isready
-  migrate  bettarrow-web:local ── node migrate.mjs, einmalig, restart "no"   (depends_on: db healthy)
-  web      bettarrow-web:local ── node server.js, Port ${APP_PORT}          (depends_on: migrate completed successfully)
+  migrate  ghcr.io/teslav0d/bettarrow:${BETTARROW_TAG:-main} ── node migrate.mjs, einmalig, restart "no"   (depends_on: db healthy)
+  web      ghcr.io/teslav0d/bettarrow:${BETTARROW_TAG:-main} ── node server.js, Port ${APP_PORT}          (depends_on: migrate completed successfully)
                                   Volume bettarrow-backups (oder BACKUP_PATH) → /backups
 ```
 
-- **Ein Image, zwei Rollen.** `migrate` und `web` nutzen dasselbe lokal gebaute Image (`pull_policy: build`). Jedes `docker compose up` bzw. Portainer-*Pull and redeploy* baut aus dem ausgecheckten Stand neu. Eine Registry ist nicht nötig.
+- **Ein Image, zwei Rollen.** `migrate` und `web` nutzen dasselbe Image aus GHCR. Wegen `pull_policy: always` prüft jedes `docker compose up` bzw. jeder Portainer-Redeploy den Tag in der Registry und zieht ein neueres Image. `compose.build.yaml` ersetzt das für lokale Builds durch `build:`.
+- **CI/CD-Kette.** `.github/workflows/ci.yml`:
+  - Job `checks`: Typecheck, Lint, Unit-/Integrationstests, Produktionsbuild.
+  - Job `image`: baut das Image, startet damit den Compose-Stack, prüft Health und Revision und führt die E2E-Tests aus.
+  - Nur auf `main`: pusht dasselbe Image als `sha-<commit>` und `main`.
+  - Das Deployment selbst bleibt ein manueller Schritt in Portainer.
+- **Build-Infos.** Die Build-Args `APP_VERSION` und `APP_REVISION` landen als Umgebungsvariablen und OCI-Labels im Image. `GET /api/health` gibt sie aus, damit sichtbar ist, welche Version wirklich läuft.
 - **Kontrollierte Migrationen.**
   - `scripts/migrate.ts` wird beim Image-Build mit esbuild zu `dist/migrate.mjs` gebündelt, damit im Runtime-Image keine Dev-Abhängigkeiten nötig sind.
   - Das Skript wartet auf die Datenbank und wendet Migrationen + Referenzdaten auf **einer** Verbindung unter einem `pg_advisory_lock` an. Selbst ein versehentlich parallel gestarteter zweiter Job wartet daher nur.

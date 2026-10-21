@@ -2,6 +2,24 @@
 
 Alle relevanten Änderungen. Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
+## [1.2.0] – 2026-10-21
+
+Deployment über GitHub Actions → GitHub Container Registry → Portainer CE.
+
+### Hinzugefügt
+- GitHub-Actions-Workflow `ci.yml`:
+  - Checks: Typecheck, Lint, Unit-/Integrationstests mit PostgreSQL-Service, Produktionsbuild.
+  - Docker-Image: wird mit dem echten Compose-Stack getestet (Migration, Health, Revision) und mit den Playwright-E2E-Tests geprüft.
+  - Veröffentlichung nach GHCR als `main` und `sha-<commit>`, nur auf `main`, mit minimalen Token-Rechten.
+- `compose.build.yaml` für lokale Image-Builds.
+- `GET /api/health` meldet zusätzlich `version` und `revision` des laufenden Images.
+- OCI-Labels (`source`, `version`, `revision`) im Image.
+- Variablen `BETTARROW_IMAGE`, `BETTARROW_TAG` (Rollback per Commit-Tag), `BETTARROW_PULL_POLICY`.
+
+### Geändert
+- `compose.yaml` baut nicht mehr auf dem Server, sondern zieht `ghcr.io/teslav0d/bettarrow` mit `pull_policy: always`. Ein Portainer-Redeploy holt damit zuverlässig das neueste Image.
+- README und IMPLEMENTATION beschreiben Einrichtung, Updates, Rollback und das Verhalten von Portainer CE.
+
 ## [1.1.0] – 2026-10-20
 
 Deployment über GitHub → Portainer (Git-Stack) → Docker.
