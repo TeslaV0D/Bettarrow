@@ -1,0 +1,178 @@
+# CI for Bettarrow
+#
+#   pull request → main : checks + tests + production build + Docker image build + smoke/E2E test
+#   push to main        : the same, then publishes the tested image to GHCR as
+#                           ghcr.io/<owner>/<repo>:sha-<short commit>   (immutable, per commit)
+#                           ghcr.io/<owner>/<repo>:main                 (moving, latest main)
+#
+# Publishing an image is NOT a deployment: the server only changes when the Portainer stack is
+# redeployed (see README.md → "Updates").
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege by default; only the image job may write packages.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # Pull requests: newer pushes cancel older runs. main: runs are queued, never cancelled
+  # mid-publish, so the `main` tag always ends up on the newest commit.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  checks:
+    name: Lint, typecheck, tests, production build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        # Throwaway database that only exists for this job.
+        env:
+          POSTGRES_USER: bettarrow
+          POSTGRES_PASSWORD: bettarrow
+          POSTGRES_DB: bettarrow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U bettarrow -d bettarrow_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      TEST_DATABASE_URL: postgres://bettarrow:bettarrow@localhost:5432/bettarrow_test
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run test:integration
+      - name: Production build
+        run: npm run build && npm run build:migrate
+
+  image:
+    name: Docker image (build, smoke + E2E test, publish)
+    needs: checks
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write # push to ghcr.io (only used on main)
+    env:
+      PUBLISH: ${{ github.ref == 'refs/heads/main' && github.event_name != 'pull_request' }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Image name and tags
+        id: meta
+        run: |
+          image="ghcr.io/${GITHUB_REPOSITORY,,}"   # registry paths must be lowercase
+          sha_tag="sha-${GITHUB_SHA::7}"
+          version="$(node -p "require('./package.json').version")"
+          {
+            echo "image=$image"
+            echo "sha_tag=$sha_tag"
+            echo "version=$version"
+          } >> "$GITHUB_OUTPUT"
+          echo "Image: $image:$sha_tag (+ :main)  version: $version  publish: $PUBLISH"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true # keep it local: it is tested first and pushed afterwards
+          push: false
+          tags: |
+            ${{ steps.meta.outputs.image }}:${{ steps.meta.outputs.sha_tag }}
+            ${{ steps.meta.outputs.image }}:main
+          build-args: |
+            APP_VERSION=${{ steps.meta.outputs.version }}
+            APP_REVISION=${{ github.sha }}
+            APP_SOURCE=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Start stack from compose.yaml with the built image
+        env:
+          BETTARROW_IMAGE: ${{ steps.meta.outputs.image }}
+          BETTARROW_TAG: ${{ steps.meta.outputs.sha_tag }}
+          BETTARROW_PULL_POLICY: never # use the image built above, do not pull
+        run: |
+          # Throwaway credentials, generated per run and never stored.
+          export POSTGRES_PASSWORD="$(openssl rand -hex 24)"
+          export APP_PASSWORD="$(openssl rand -hex 16)"
+          echo "::add-mask::$POSTGRES_PASSWORD"
+          echo "::add-mask::$APP_PASSWORD"
+          echo "E2E_PASSWORD=$APP_PASSWORD" >> "$GITHUB_ENV"
+          export APP_BIND=127.0.0.1 APP_PORT=3000
+          docker compose up -d
+          for i in $(seq 1 60); do
+            status="$(docker inspect -f '{{.State.Health.Status}}' bettarrow-web 2>/dev/null || echo starting)"
+            [ "$status" = healthy ] && break
+            sleep 3
+          done
+          docker compose ps -a
+          test "$(docker inspect -f '{{.State.ExitCode}}' bettarrow-migrate)" = 0
+          test "$(docker inspect -f '{{.State.Health.Status}}' bettarrow-web)" = healthy
+          health="$(curl -fsS http://127.0.0.1:3000/api/health)"
+          echo "$health"
+          echo "$health" | grep -q "\"revision\":\"$GITHUB_SHA\""
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - name: E2E tests against the running container
+        env:
+          E2E_BASE_URL: http://127.0.0.1:3000
+        run: |
+          npm ci --no-audit --no-fund
+          npx playwright install --with-deps chromium
+          npm run test:e2e
+
+      - name: Container logs
+        if: failure()
+        run: docker compose logs --no-color --tail 200
+        env:
+          POSTGRES_PASSWORD: unused # only needed for compose file interpolation
+
+      - name: Log in to GHCR
+        if: env.PUBLISH == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Publish image
+        if: env.PUBLISH == 'true'
+        env:
+          IMAGE: ${{ steps.meta.outputs.image }}
+          SHA_TAG: ${{ steps.meta.outputs.sha_tag }}
+        run: |
+          # Immutable commit tag first, then move `main` to it.
+          docker push "$IMAGE:$SHA_TAG"
+          docker push "$IMAGE:main"
+          echo "### Published" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`$IMAGE:$SHA_TAG\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "- \`$IMAGE:main\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "Not deployed yet: redeploy the Portainer stack to roll it out." >> "$GITHUB_STEP_SUMMARY"

@@ -1,0 +1,14 @@
+# Optional override: build the app image from this checkout instead of pulling it from GHCR
+# (development, testing a change before pushing, or when the registry is unreachable).
+#   docker compose -f compose.yaml -f compose.build.yaml up -d --build
+services:
+  migrate:
+    build: &build
+      context: .
+      dockerfile: Dockerfile
+    image: bettarrow-web:local
+    pull_policy: build
+  web:
+    build: *build
+    image: bettarrow-web:local
+    pull_policy: build

@@ -1,23 +1,25 @@
 # ---------------------------------------------------------------------------
 # Bettarrow – Docker Compose / Portainer stack
 #
-# Portainer: Stacks → Add stack → Repository, Compose path: compose.yaml
+# The app image is built and published by GitHub Actions (.github/workflows/ci.yml) to
+#   ghcr.io/teslav0d/bettarrow:main          (latest successful build of main)
+#   ghcr.io/teslav0d/bettarrow:sha-<commit>  (immutable, one per commit)
+# Nothing is built on the server. To build locally instead: see compose.build.yaml.
+#
+# Portainer: Stacks → Add stack → Repository, Compose path: compose.yaml (see README.md)
 # Required variables (set in Portainer or in .env): POSTGRES_PASSWORD, APP_PASSWORD_HASH
-# See README.md → "Deployment mit Portainer".
 #
 # Start order: db (healthy) → migrate (one-shot job, must succeed) → web
 # Data lives in the named volumes bettarrow-db-data / bettarrow-backups and survives
-# container replacement, restarts and stack updates.
+# container replacement, image updates, restarts and stack redeploys.
 # ---------------------------------------------------------------------------
 name: bettarrow
 
 x-app-image: &app-image
-  build:
-    context: .
-    dockerfile: Dockerfile
-  image: bettarrow-web:local
-  # Always build from the checked-out source on `up` / Portainer redeploy (no registry needed).
-  pull_policy: build
+  image: ${BETTARROW_IMAGE:-ghcr.io/teslav0d/bettarrow}:${BETTARROW_TAG:-main}
+  # always: every `docker compose up` / Portainer redeploy checks the registry and pulls a newer
+  # image for the tag, so a moving tag like `main` is picked up reliably.
+  pull_policy: ${BETTARROW_PULL_POLICY:-always}
 
 x-logging: &logging
   driver: json-file
