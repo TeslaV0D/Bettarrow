@@ -10,7 +10,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   if (await getSession()) redirect("/");
   const { next } = await searchParams;
   return (
-    <main className="grid min-h-dvh place-items-center px-4 py-10">
+    <main className="grid min-h-dvh place-items-center px-4 pb-10 pt-[calc(2.5rem+env(safe-area-inset-top))]">
       <div className="w-full max-w-sm">
         <div className="mb-8 flex flex-col items-center text-center">
           <LogoMark className="size-12" />

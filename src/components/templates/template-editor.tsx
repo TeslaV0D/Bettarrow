@@ -14,6 +14,7 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { ExercisePicker } from "@/components/exercises/exercise-picker";
 import { exerciseSubtitle, useReferenceMaps, type Reference } from "@/components/exercises/use-exercise-search";
+import { uuid } from "@/lib/uuid";
 
 export interface EditorItem {
   key: string;
@@ -87,7 +88,7 @@ export function TemplateEditor({
         ...ids.map((exerciseId) => {
           const ex = byId.get(exerciseId);
           return {
-            key: crypto.randomUUID(),
+            key: uuid(),
             exerciseId,
             targetSets: 3,
             repMin: ex?.repMin?.toString() ?? "",

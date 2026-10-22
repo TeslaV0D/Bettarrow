@@ -34,6 +34,7 @@ import { ExerciseCard } from "./exercise-card";
 import { RestTimerBar } from "./rest-timer-bar";
 import { restTimer } from "./rest-timer-store";
 import { clearDraft, readDraft, useWorkoutSync, type SyncStatus } from "./use-workout-sync";
+import { uuid } from "@/lib/uuid";
 
 export interface LoggerSettings {
   unit: WeightUnit;
@@ -124,7 +125,7 @@ export function WorkoutLogger({
     [byId, editMode, settings.autoStartRestTimer, settings.defaultRestSeconds],
   );
   const onRemoveSet = useCallback((exId: string, setId: string) => dispatch({ type: "removeSet", exId, setId }), []);
-  const onAddSet = useCallback((exId: string) => dispatch({ type: "addSet", exId, id: crypto.randomUUID() }), []);
+  const onAddSet = useCallback((exId: string) => dispatch({ type: "addSet", exId, id: uuid() }), []);
   const onMove = useCallback((exId: string, dir: -1 | 1) => dispatch({ type: "moveExercise", exId, dir }), []);
   const onNotes = useCallback((exId: string, notes: string) => dispatch({ type: "setExerciseNotes", exId, notes }), []);
   const onSetDetails = useCallback((exId: string, setId: string) => setDetailsFor({ exId, setId }), []);
@@ -141,7 +142,7 @@ export function WorkoutLogger({
       const src = prefill[exerciseId];
       const sets = buildPrefillSets(src?.sets ?? null, { targetSets: src ? null : 3, repMin: meta?.tracking === "reps" ? meta?.repMin : null });
       return {
-        id: crypto.randomUUID(),
+        id: uuid(),
         exerciseId,
         meta: {
           tracking: meta?.tracking ?? "reps",
@@ -152,7 +153,7 @@ export function WorkoutLogger({
         previous: src ? { date: src.date, sets: src.sets.map((s) => ({ setType: s.setType, weightKg: s.weightKg, reps: s.reps, durationSeconds: s.durationSeconds })) } : null,
         sets: sets.map(
           (s): LSet => ({
-            id: crypto.randomUUID(),
+            id: uuid(),
             setType: s.setType as SetType,
             weightKg: s.weightKg,
             reps: s.reps,
@@ -260,7 +261,7 @@ export function WorkoutLogger({
   return (
     <div className="mx-auto max-w-3xl">
       {/* Sticky header */}
-      <div className="sticky top-0 z-20 -mx-4 mb-4 border-b border-border bg-bg/95 px-4 pb-3 pt-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 lg:pt-4">
+      <div className="sticky top-[env(safe-area-inset-top)] z-20 -mx-4 mb-4 border-b border-border bg-bg/95 px-4 pb-3 pt-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 lg:pt-4">
         <div className="flex items-center gap-2">
           <Link href={editMode ? `/history/${state.workoutId}` : "/"} className="-ml-2 grid size-10 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text" aria-label="Zurück">
             <ChevronLeft className="size-5" />

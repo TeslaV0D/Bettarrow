@@ -27,6 +27,9 @@ export function AppShell({ active, children }: { active: ActiveWorkoutInfo | nul
 
   return (
     <div className="min-h-dvh lg:grid lg:grid-cols-[248px_1fr]">
+      {/* Mobile: opaque strip behind the status bar / notch so content never scrolls under it */}
+      <div aria-hidden className="safe-top-cover lg:hidden" />
+
       {/* Desktop sidebar */}
       <aside className="sticky top-0 hidden h-dvh flex-col border-r border-border bg-bg px-3 py-5 lg:flex">
         <Link href="/" className="mb-6 px-2">
@@ -76,7 +79,7 @@ export function AppShell({ active, children }: { active: ActiveWorkoutInfo | nul
       <div className="min-w-0">
         <main
           className={cn(
-            "mx-auto w-full max-w-6xl px-4 pt-5 sm:px-6 lg:px-8 lg:pt-8 lg:pb-12",
+            "mx-auto w-full max-w-6xl px-4 pt-[calc(1.25rem+env(safe-area-inset-top))] sm:px-6 lg:px-8 lg:pt-8 lg:pb-12",
             onWorkout ? "pb-40" : active ? "pb-44" : "pb-28",
           )}
         >

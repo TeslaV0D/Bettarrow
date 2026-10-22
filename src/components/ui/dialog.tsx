@@ -38,7 +38,7 @@ export function DialogContent({
       <RD.Content
         onOpenAutoFocus={onOpenAutoFocus}
         className={cn(
-          "fixed z-50 flex max-h-[92dvh] w-full flex-col border border-border bg-surface shadow-2xl focus:outline-none",
+          "fixed z-50 flex max-h-[calc(100dvh-env(safe-area-inset-top)-0.75rem)] sm:max-h-[92dvh] w-full flex-col border border-border bg-surface shadow-2xl focus:outline-none",
           "inset-x-0 bottom-0 rounded-t-xl data-[state=open]:animate-slide-up",
           "sm:inset-x-auto sm:bottom-auto sm:left-1/2 sm:top-1/2 sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-xl sm:data-[state=open]:animate-scale-in",
           width,
