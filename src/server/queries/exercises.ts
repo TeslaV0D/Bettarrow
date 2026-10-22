@@ -4,6 +4,8 @@ import { asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/server/db";
 import * as s from "@/server/db/schema";
 import type { CatalogExercise, MuscleRef, NamedRef } from "@/lib/exercise-search";
+import { localizeReference } from "@/lib/i18n/reference";
+import { getT } from "@/server/i18n";
 
 export interface ReferenceData {
   muscles: MuscleRef[];
@@ -11,8 +13,10 @@ export interface ReferenceData {
   patterns: NamedRef[];
 }
 
+/** Muscle groups, equipment and movement patterns with built-in names in the UI language. */
 export const getReferenceData = cache(async (): Promise<ReferenceData> => {
-  const [muscles, equipment, patterns] = await Promise.all([
+  const [t, muscles, equipment, patterns] = await Promise.all([
+    getT(),
     db
       .select({ id: s.muscleGroups.id, name: s.muscleGroups.name, parentId: s.muscleGroups.parentId, region: s.muscleGroups.region })
       .from(s.muscleGroups)
@@ -23,7 +27,7 @@ export const getReferenceData = cache(async (): Promise<ReferenceData> => {
       .orderBy(asc(s.equipment.sortOrder), asc(s.equipment.name)),
     db.select({ id: s.movementPatterns.id, name: s.movementPatterns.name }).from(s.movementPatterns).orderBy(asc(s.movementPatterns.sortOrder), asc(s.movementPatterns.name)),
   ]);
-  return { muscles, equipment, patterns };
+  return localizeReference(t, { muscles, equipment, patterns });
 });
 
 const usage = db

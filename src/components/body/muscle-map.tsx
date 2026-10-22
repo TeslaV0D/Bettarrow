@@ -4,6 +4,7 @@ import { useState } from "react";
 import { cn } from "@/lib/cn";
 import { Segmented } from "@/components/ui/segmented";
 import { BACK, BACK_DETAILS, FRONT, FRONT_DETAILS, SILHOUETTE, type BodyView } from "./body-paths";
+import { useT } from "@/components/i18n-provider";
 
 const MIRROR = "matrix(-1 0 0 1 200 0)";
 
@@ -29,6 +30,7 @@ export function MuscleMap({
   defaultView?: BodyView;
 }) {
   const [view, setView] = useState<BodyView>(defaultView);
+  const t = useT();
   const views: BodyView[] = compact ? ["front", "back"] : [view];
 
   return (
@@ -36,12 +38,12 @@ export function MuscleMap({
       {!compact ? (
         <Segmented
           size="sm"
-          aria-label="Ansicht"
+          aria-label={t.muscleMap.view}
           value={view}
           onChange={setView}
           options={[
-            { value: "front", label: "Vorne" },
-            { value: "back", label: "Hinten" },
+            { value: "front", label: t.muscleMap.front },
+            { value: "back", label: t.muscleMap.back },
           ]}
         />
       ) : null}
@@ -70,6 +72,7 @@ function Figure({
   const muscles = view === "front" ? FRONT : BACK;
   const details = view === "front" ? FRONT_DETAILS : BACK_DETAILS;
   const interactive = !!onSelect;
+  const t = useT();
 
   const shape = (id: string, d: string, mirrored: boolean) => {
     const value = intensity[id] ?? 0;
@@ -94,12 +97,12 @@ function Figure({
   // Group shapes per muscle so every muscle is a single accessible button.
   const ids = [...new Set(muscles.map((m) => m.id))];
   return (
-    <svg viewBox="0 0 200 410" className="h-auto w-full max-w-[200px]" role="group" aria-label={view === "front" ? "Vorderansicht" : "Rückansicht"}>
+    <svg viewBox="0 0 200 410" className="h-auto w-full max-w-[200px]" role="group" aria-label={view === "front" ? t.muscleMap.frontView : t.muscleMap.backView}>
       <path d={SILHOUETTE} fill="var(--surface-2)" />
       <path d={SILHOUETTE} transform={MIRROR} fill="var(--surface-2)" />
       {ids.map((id) => {
         const paths = muscles.filter((m) => m.id === id);
-        const label = `${labels[id] ?? id}${(intensity[id] ?? 0) > 0 ? " – trainiert" : " – nicht trainiert"}`;
+        const label = `${labels[id] ?? id} – ${(intensity[id] ?? 0) > 0 ? t.muscleMap.trained : t.muscleMap.notTrained}`;
         return (
           <g
             key={id}

@@ -6,8 +6,11 @@ import { getCalendarRange, listRules } from "@/server/services/calendar";
 import { getSettings } from "@/server/queries/settings";
 import { addDays, endOfWeek, isYmd, monthGrid, startOfWeek, todayIn } from "@/lib/dates";
 import { CalendarView } from "@/components/calendar/calendar-view";
+import { getT } from "@/server/i18n";
 
-export const metadata: Metadata = { title: "Kalender" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT()).calendar.title };
+}
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ view?: string; date?: string; day?: string }> }) {
   const sp = await searchParams;

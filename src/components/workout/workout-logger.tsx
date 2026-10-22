@@ -35,6 +35,8 @@ import { RestTimerBar } from "./rest-timer-bar";
 import { restTimer } from "./rest-timer-store";
 import { clearDraft, readDraft, useWorkoutSync, type SyncStatus } from "./use-workout-sync";
 import { uuid } from "@/lib/uuid";
+import { fmt, plural } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 
 export interface LoggerSettings {
   unit: WeightUnit;
@@ -60,6 +62,7 @@ export function WorkoutLogger({
   settings: LoggerSettings;
 }) {
   const router = useRouter();
+  const t = useT();
   const [state, dispatch] = useReducer(loggerReducer, initial);
   const editMode = state.status === "completed";
   const maps = useReferenceMaps(reference);
@@ -81,7 +84,7 @@ export function WorkoutLogger({
     const draft = readDraft(initial.workoutId);
     if (draft && draft.workoutId === initial.workoutId && draft.revision > initial.baseRevision && draft.status === initial.status) {
       dispatch({ type: "replaceState", state: { ...draft, baseRevision: initial.baseRevision } });
-      toast("Lokale, noch nicht gespeicherte Änderungen wurden wiederhergestellt.");
+      toast(t.workout.draftRestored);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -136,7 +139,7 @@ export function WorkoutLogger({
   async function buildExercises(exerciseIds: string[]) {
     const res = await getPrefillAction(exerciseIds, state.workoutId).catch(() => null);
     const prefill = res && res.ok ? res.data : {};
-    if (!res || !res.ok) toast("Offline: Übungen ohne Vorwerte hinzugefügt.");
+    if (!res || !res.ok) toast(t.workout.offlineNoPrefill);
     return exerciseIds.map((exerciseId) => {
       const meta = byId.get(exerciseId);
       const src = prefill[exerciseId];
@@ -201,7 +204,7 @@ export function WorkoutLogger({
   async function finish(notes: string, incomplete: "discard" | "complete") {
     await sync.flush();
     if (sync.isDirty()) {
-      toast.error("Noch nicht alle Änderungen gespeichert (offline?). Deine Daten sind lokal gesichert – versuche es gleich erneut.");
+      toast.error(t.workout.notAllSaved);
       return false;
     }
     const res = await finishWorkoutAction(state.workoutId, { notes: notes || null, incomplete });
@@ -219,7 +222,7 @@ export function WorkoutLogger({
   async function doneEditing() {
     await sync.flush();
     if (sync.isDirty()) {
-      toast.error("Änderungen konnten noch nicht gespeichert werden. Sie sind lokal gesichert.");
+      toast.error(t.workout.editNotSaved);
       return;
     }
     clearDraft(state.workoutId);
@@ -236,10 +239,10 @@ export function WorkoutLogger({
     clearDraft(state.workoutId);
     restTimer.stop();
     const id = state.workoutId;
-    toast("Training verworfen", {
+    toast(t.workout.discarded, {
       duration: 8000,
       action: {
-        label: "Rückgängig",
+        label: t.common.undoAction,
         onClick: async () => {
           const r = await restoreWorkoutAction(id);
           if (r.ok) {
@@ -263,18 +266,18 @@ export function WorkoutLogger({
       {/* Sticky header */}
       <div className="sticky top-[env(safe-area-inset-top)] z-20 -mx-4 mb-4 border-b border-border bg-bg/95 px-4 pb-3 pt-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 lg:pt-4">
         <div className="flex items-center gap-2">
-          <Link href={editMode ? `/history/${state.workoutId}` : "/"} className="-ml-2 grid size-10 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text" aria-label="Zurück">
+          <Link href={editMode ? `/history/${state.workoutId}` : "/"} className="-ml-2 grid size-10 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-text" aria-label={t.common.back}>
             <ChevronLeft className="size-5" />
           </Link>
-          <button type="button" onClick={() => setRenameOpen(true)} className="min-w-0 flex-1 text-left" aria-label="Training umbenennen">
+          <button type="button" onClick={() => setRenameOpen(true)} className="min-w-0 flex-1 text-left" aria-label={t.workout.rename}>
             <span className="block truncate text-[17px] font-semibold tracking-tight">{state.name}</span>
             <span className="flex items-center gap-2 text-sm text-muted">
               {editMode ? (
-                <span>Training bearbeiten</span>
+                <span>{t.workout.editing}</span>
               ) : (
                 <Elapsed className={cn("tabular", state.pausedAt ? "text-warning" : "text-accent")} startedAt={state.startedAt} pausedAt={state.pausedAt} pausedSeconds={state.pausedSeconds} />
               )}
-              {state.pausedAt ? <span className="text-warning">pausiert</span> : null}
+              {state.pausedAt ? <span className="text-warning">{t.workout.paused}</span> : null}
               <SyncBadge status={sync.status} />
             </span>
           </button>
@@ -282,7 +285,7 @@ export function WorkoutLogger({
             <Button
               size="icon"
               variant="ghost"
-              aria-label={state.pausedAt ? "Training fortsetzen" : "Training pausieren"}
+              aria-label={state.pausedAt ? t.workout.resume : t.workout.pause}
               onClick={() => dispatch(state.pausedAt ? { type: "resume", at: new Date().toISOString() } : { type: "pause", at: new Date().toISOString() })}
             >
               {state.pausedAt ? <Play className="size-5" /> : <Pause className="size-5" />}
@@ -290,20 +293,20 @@ export function WorkoutLogger({
           ) : null}
           {editMode ? (
             <Button variant="primary" onClick={doneEditing}>
-              Fertig
+              {t.common.done}
             </Button>
           ) : (
             <Button variant="primary" onClick={() => setFinishOpen(true)}>
-              Beenden
+              {t.workout.finish}
             </Button>
           )}
         </div>
         <div className="mt-3 flex items-center gap-3 text-xs text-muted">
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100} aria-label="Fortschritt">
+          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-valuenow={Math.round(progress * 100)} aria-valuemin={0} aria-valuemax={100} aria-label={t.common.progress}>
             <div className="h-full rounded-full bg-accent transition-[width] duration-300" style={{ width: `${progress * 100}%` }} />
           </div>
           <span className="tabular whitespace-nowrap">
-            {totals.completedSets}/{totals.totalSets} Sätze · {formatVolume(totals.volumeKg, settings.unit)}
+            {fmt(t.workout.setsProgress, { done: totals.completedSets, total: totals.totalSets })} · {formatVolume(totals.volumeKg, settings.unit)}
           </span>
         </div>
       </div>
@@ -311,15 +314,15 @@ export function WorkoutLogger({
       {sync.status === "conflict" ? (
         <div className="mb-4 rounded-lg border border-warning/40 bg-warning-soft p-3 text-sm">
           <p className="flex items-center gap-2 font-medium text-warning">
-            <AlertTriangle className="size-4" /> Auf einem anderen Gerät geändert
+            <AlertTriangle className="size-4" /> {t.workout.conflictTitle}
           </p>
-          <p className="mt-1 text-muted">Dieses Training wurde zwischenzeitlich woanders bearbeitet. Welche Version soll gelten?</p>
+          <p className="mt-1 text-muted">{t.workout.conflictText}</p>
           <div className="mt-3 flex flex-wrap gap-2">
             <Button size="sm" onClick={() => { clearDraft(state.workoutId); window.location.reload(); }}>
-              <RefreshCw className="size-4" /> Server-Version laden
+              <RefreshCw className="size-4" /> {t.workout.loadServer}
             </Button>
             <Button size="sm" variant="outline" onClick={() => sync.resolveConflictKeepMine()}>
-              Meine Version behalten
+              {t.workout.keepMine}
             </Button>
           </div>
         </div>
@@ -359,26 +362,26 @@ export function WorkoutLogger({
 
       {state.exercises.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border-strong px-6 py-10 text-center">
-          <p className="font-medium">Noch keine Übungen</p>
-          <p className="mt-1 text-sm text-muted">Füge die erste Übung hinzu – die Werte deines letzten Trainings werden automatisch übernommen.</p>
+          <p className="font-medium">{t.workout.noExercises}</p>
+          <p className="mt-1 text-sm text-muted">{t.workout.noExercisesHint}</p>
         </div>
       ) : null}
 
       <Button variant="soft" size="lg" className="mt-4 w-full" onClick={() => setPickerOpen(true)}>
         <Plus className="size-5" aria-hidden />
-        Übung hinzufügen
+        {t.workout.addExercise}
       </Button>
 
       <div className="mt-6 space-y-1.5">
         <label htmlFor="workout-notes" className="text-sm font-medium text-muted">
-          Notizen zum Training
+          {t.workout.notes}
         </label>
         <Textarea
           id="workout-notes"
           defaultValue={state.notes ?? ""}
           key={`notes-${state.workoutId}-${state.notes === null}`}
           onBlur={(e) => e.target.value !== (state.notes ?? "") && dispatch({ type: "setNotes", notes: e.target.value })}
-          placeholder="Wie lief es? Energie, Schlaf, Besonderheiten …"
+          placeholder={t.workout.notesPlaceholder}
           rows={3}
         />
       </div>
@@ -387,7 +390,7 @@ export function WorkoutLogger({
         <div className="mt-8 flex justify-center">
           <Button variant="ghost" className="text-danger hover:text-danger" onClick={() => setDiscardOpen(true)}>
             <Trash2 className="size-4" aria-hidden />
-            Training verwerfen
+            {t.workout.discard}
           </Button>
         </div>
       ) : null}
@@ -402,7 +405,7 @@ export function WorkoutLogger({
         reference={reference}
         recentIds={recentIds}
         multiple={false}
-        title="Übung tauschen"
+        title={t.workout.replaceExercise}
         onConfirm={([id]) => replaceId && void replaceExercise(replaceId, id)}
       />
 
@@ -438,9 +441,9 @@ export function WorkoutLogger({
         open={discardOpen}
         onOpenChange={setDiscardOpen}
         destructive
-        title="Training verwerfen?"
-        description="Das Training wird nicht gespeichert und zählt nicht für Statistiken oder Vorwerte. Du kannst es direkt danach noch rückgängig machen."
-        confirmLabel="Verwerfen"
+        title={t.workout.discardTitle}
+        description={t.workout.discardText}
+        confirmLabel={t.workout.discardConfirm}
         onConfirm={discard}
       />
 
@@ -448,9 +451,9 @@ export function WorkoutLogger({
         open={!!removeEx}
         onOpenChange={(o) => !o && setRemoveExId(null)}
         destructive
-        title="Übung entfernen?"
-        description={removeEx ? `${byId.get(removeEx.exerciseId)?.name ?? "Übung"} mit ${removeEx.sets.length} Sätzen wird aus diesem Training entfernt.` : undefined}
-        confirmLabel="Entfernen"
+        title={t.workout.removeExerciseTitle}
+        description={removeEx ? plural(t.workout.removeExerciseText, removeEx.sets.length, { name: byId.get(removeEx.exerciseId)?.name ?? t.common.exercise }) : undefined}
+        confirmLabel={t.common.remove}
         onConfirm={() => {
           if (removeExId) dispatch({ type: "removeExercise", exId: removeExId });
         }}
@@ -460,13 +463,14 @@ export function WorkoutLogger({
 }
 
 function SyncBadge({ status }: { status: SyncStatus }) {
+  const t = useT();
   const map: Record<SyncStatus, { icon: React.ReactNode; label: string; cls: string }> = {
-    saved: { icon: <Check className="size-3.5" />, label: "Gespeichert", cls: "text-subtle" },
-    pending: { icon: <Cloud className="size-3.5" />, label: "Ungespeichert", cls: "text-subtle" },
-    saving: { icon: <Loader2 className="size-3.5 animate-spin" />, label: "Speichert …", cls: "text-subtle" },
-    offline: { icon: <CloudOff className="size-3.5" />, label: "Offline – lokal gesichert", cls: "text-warning" },
-    conflict: { icon: <AlertTriangle className="size-3.5" />, label: "Konflikt", cls: "text-warning" },
-    error: { icon: <AlertTriangle className="size-3.5" />, label: "Fehler beim Speichern", cls: "text-danger" },
+    saved: { icon: <Check className="size-3.5" />, label: t.workout.syncSaved, cls: "text-subtle" },
+    pending: { icon: <Cloud className="size-3.5" />, label: t.workout.syncPending, cls: "text-subtle" },
+    saving: { icon: <Loader2 className="size-3.5 animate-spin" />, label: t.workout.syncSaving, cls: "text-subtle" },
+    offline: { icon: <CloudOff className="size-3.5" />, label: t.workout.syncOffline, cls: "text-warning" },
+    conflict: { icon: <AlertTriangle className="size-3.5" />, label: t.workout.syncConflict, cls: "text-warning" },
+    error: { icon: <AlertTriangle className="size-3.5" />, label: t.workout.syncError, cls: "text-danger" },
   };
   const m = map[status];
   return (
@@ -479,11 +483,12 @@ function SyncBadge({ status }: { status: SyncStatus }) {
 
 function BodyweightPrompt({ unit, onSave }: { unit: WeightUnit; onSave: (kg: number) => void }) {
   const [value, setValue] = useState("");
+  const t = useT();
   const parsed = parseDecimal(value);
   return (
     <div className="mb-4 rounded-lg border border-info/30 bg-info-soft p-3">
-      <p className="text-sm font-medium text-info">Körpergewicht fehlt</p>
-      <p className="mt-0.5 text-sm text-muted">Für Körpergewichtsübungen wird dein Gewicht zur Lastberechnung benötigt. Es wird mit diesem Training gespeichert.</p>
+      <p className="text-sm font-medium text-info">{t.workout.bodyweightMissing}</p>
+      <p className="mt-0.5 text-sm text-muted">{t.workout.bodyweightMissingText}</p>
       <form
         className="mt-2 flex gap-2"
         onSubmit={(e) => {
@@ -491,9 +496,9 @@ function BodyweightPrompt({ unit, onSave }: { unit: WeightUnit; onSave: (kg: num
           if (typeof parsed === "number" && parsed > 0) onSave(unitToKg(parsed, unit));
         }}
       >
-        <Input inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} placeholder={`Gewicht in ${unit}`} aria-label="Körpergewicht" className="max-w-40" />
+        <Input inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} placeholder={fmt(t.workout.weightIn, { unit })} aria-label={t.workout.bodyweight} className="max-w-40" />
         <Button type="submit" disabled={typeof parsed !== "number" || parsed <= 0}>
-          Übernehmen
+          {t.common.apply}
         </Button>
       </form>
     </div>
@@ -516,18 +521,19 @@ function SetDetailsDialog({
   const [rir, setRir] = useState(set?.rir?.toString().replace(".", ",") ?? "");
   const [rpe, setRpe] = useState(set?.rpe?.toString().replace(".", ",") ?? "");
   const [note, setNote] = useState(set?.note ?? "");
+  const t = useT();
   const rirV = parseDecimal(rir);
   const rpeV = parseDecimal(rpe);
   const valid = rirV !== undefined && rpeV !== undefined && (rirV == null || rirV <= 10) && (rpeV == null || (rpeV >= 1 && rpeV <= 10));
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        title="Satzdetails"
+        title={t.workout.setDetails}
         size="sm"
         footer={
           <>
             <Button variant="ghost" onClick={onClose}>
-              Abbrechen
+              {t.common.cancel}
             </Button>
             <Button
               variant="primary"
@@ -537,22 +543,22 @@ function SetDetailsDialog({
                 onClose();
               }}
             >
-              Übernehmen
+              {t.common.apply}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <Field label="RIR" htmlFor="d-rir" hint="Wdh. in Reserve (0–10)">
+            <Field label="RIR" htmlFor="d-rir" hint={t.workout.rirHint}>
               <Input id="d-rir" inputMode="decimal" value={rir} onChange={(e) => setRir(e.target.value)} aria-invalid={rirV === undefined || (rirV != null && rirV > 10)} />
             </Field>
-            <Field label="RPE" htmlFor="d-rpe" hint="Anstrengung (1–10)">
+            <Field label="RPE" htmlFor="d-rpe" hint={t.workout.rpeHint}>
               <Input id="d-rpe" inputMode="decimal" value={rpe} onChange={(e) => setRpe(e.target.value)} aria-invalid={rpeV === undefined || (rpeV != null && (rpeV < 1 || rpeV > 10))} />
             </Field>
           </div>
-          {effortMetric === "none" ? <p className="text-xs text-subtle">RIR/RPE-Spalte kann im Profil unter Einstellungen eingeblendet werden.</p> : null}
-          <Field label="Notiz" htmlFor="d-note">
+          {effortMetric === "none" ? <p className="text-xs text-subtle">{t.workout.effortHidden}</p> : null}
+          <Field label={t.common.note} htmlFor="d-note">
             <Textarea id="d-note" value={note} onChange={(e) => setNote(e.target.value)} maxLength={500} rows={2} />
           </Field>
         </div>
@@ -563,9 +569,10 @@ function SetDetailsDialog({
 
 function RestDialog({ open, current, onClose, onSave }: { open: boolean; current: number; onClose: () => void; onSave: (s: number | null) => void }) {
   const options = [30, 45, 60, 90, 120, 150, 180, 240, 300];
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent title="Ruhezeit für diese Übung" size="sm">
+      <DialogContent title={t.workout.restForExercise} size="sm">
         <div className="grid grid-cols-3 gap-2">
           {options.map((o) => (
             <Button
@@ -589,7 +596,7 @@ function RestDialog({ open, current, onClose, onSave }: { open: boolean; current
             onClose();
           }}
         >
-          Standard verwenden
+          {t.common.useDefault}
         </Button>
       </DialogContent>
     </Dialog>
@@ -598,10 +605,11 @@ function RestDialog({ open, current, onClose, onSave }: { open: boolean; current
 
 function RenameDialog({ open, name, onClose, onSave }: { open: boolean; name: string; onClose: () => void; onSave: (n: string) => void }) {
   const [value, setValue] = useState(name);
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        title="Training umbenennen"
+        title={t.workout.rename}
         size="sm"
         footer={
           <Button
@@ -612,11 +620,11 @@ function RenameDialog({ open, name, onClose, onSave }: { open: boolean; name: st
               onClose();
             }}
           >
-            Speichern
+            {t.common.save}
           </Button>
         }
       >
-        <Input value={value} onChange={(e) => setValue(e.target.value)} aria-label="Name" maxLength={120} autoFocus />
+        <Input value={value} onChange={(e) => setValue(e.target.value)} aria-label={t.common.name} maxLength={120} autoFocus />
       </DialogContent>
     </Dialog>
   );
@@ -640,17 +648,18 @@ function FinishDialog({
   const [text, setText] = useState(notes);
   const [policy, setPolicy] = useState<"discard" | "complete">("discard");
   const [busy, setBusy] = useState(false);
+  const t = useT();
   const open_ = totals.totalSets - totals.completedSets;
   return (
     <Dialog open={open} onOpenChange={(o) => !busy && onOpenChange(o)}>
       <DialogContent
-        title="Training abschließen"
-        description="Erst mit dem Abschluss zählt das Training in Verlauf und Statistiken."
+        title={t.workout.finishTitle}
+        description={t.workout.finishText}
         size="md"
         footer={
           <>
             <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-              Weiter trainieren
+              {t.workout.keepTraining}
             </Button>
             <Button
               variant="primary"
@@ -663,30 +672,30 @@ function FinishDialog({
                 if (ok) onOpenChange(false);
               }}
             >
-              Abschließen
+              {t.workout.finishConfirm}
             </Button>
           </>
         }
       >
         <div className="grid grid-cols-3 gap-2 text-center">
-          <Stat label="Übungen" value={String(totals.exercises)} />
-          <Stat label="Arbeitssätze" value={String(totals.workingSets)} />
-          <Stat label="Volumen" value={formatVolume(totals.volumeKg, unit)} />
+          <Stat label={t.nav.exercises} value={String(totals.exercises)} />
+          <Stat label={t.dashboard.workingSets} value={String(totals.workingSets)} />
+          <Stat label={t.dashboard.volume} value={formatVolume(totals.volumeKg, unit)} />
         </div>
         {open_ > 0 ? (
           <fieldset className="mt-4 space-y-2">
             <legend className="mb-2 text-sm font-medium">
-              {open_} {open_ === 1 ? "Satz ist" : "Sätze sind"} nicht abgehakt
+              {plural(t.workout.openSets, open_)}
             </legend>
-            <Radio name="incomplete" checked={policy === "discard"} onChange={() => setPolicy("discard")} label="Nicht abgehakte Sätze verwerfen" />
-            <Radio name="incomplete" checked={policy === "complete"} onChange={() => setPolicy("complete")} label="Als erledigt übernehmen (mit eingetragenen Werten)" />
+            <Radio name="incomplete" checked={policy === "discard"} onChange={() => setPolicy("discard")} label={t.workout.discardOpen} />
+            <Radio name="incomplete" checked={policy === "complete"} onChange={() => setPolicy("complete")} label={t.workout.completeOpen} />
           </fieldset>
         ) : null}
         {totals.completedSets === 0 && policy === "discard" ? (
-          <p className="mt-3 text-sm text-warning">Noch kein Satz abgehakt. Hake Sätze ab oder übernimm sie als erledigt.</p>
+          <p className="mt-3 text-sm text-warning">{t.workout.noneCompleted}</p>
         ) : null}
         <div className="mt-4">
-          <Field label="Notizen (optional)" htmlFor="finish-notes">
+          <Field label={t.workout.notesOptional} htmlFor="finish-notes">
             <Textarea id="finish-notes" value={text} onChange={(e) => setText(e.target.value)} rows={3} maxLength={5000} />
           </Field>
         </div>

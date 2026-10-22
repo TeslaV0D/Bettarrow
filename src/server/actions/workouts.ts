@@ -16,9 +16,11 @@ import {
   startWorkout,
   type PrefillSource,
 } from "@/server/services/workouts";
+import { msg } from "@/lib/i18n";
 import { run, UserError } from "./_util";
+import { getT } from "@/server/i18n";
 
-const id = z.uuid("Ungültige ID");
+const id = z.uuid(msg("validation.invalidId"));
 
 function revalidateAll() {
   revalidatePath("/", "layout");
@@ -34,15 +36,10 @@ const startSchema = z.object({
 export async function startWorkoutAction(input: z.input<typeof startSchema>) {
   return run(async () => {
     const data = startSchema.parse(input);
-    const settings = await getSettings();
-    try {
-      const res = await startWorkout(db, data, { timezone: settings.timezone });
-      revalidateAll();
-      return res;
-    } catch (err) {
-      if (err instanceof Error && /nicht gefunden|Ruhetag/.test(err.message)) throw new UserError(err.message);
-      throw err;
-    }
+    const [settings, t] = await Promise.all([getSettings(), getT()]);
+    const res = await startWorkout(db, data, { timezone: settings.timezone, freeName: t.workout.freeName });
+    revalidateAll();
+    return res;
   });
 }
 
@@ -82,7 +79,7 @@ export async function finishWorkoutAction(workoutId: string, input: { notes?: st
       .object({ notes: z.string().max(5000).nullish(), incomplete: z.enum(["discard", "complete"]).default("discard") })
       .parse(input);
     const res = await finishWorkout(db, wid, { notes: opts.notes ?? null, incomplete: opts.incomplete });
-    if (!res.ok) throw new UserError(res.reason === "not_found" ? "Training nicht gefunden." : "Dieses Training ist bereits abgeschlossen.");
+    if (!res.ok) throw new UserError(msg(res.reason === "not_found" ? "workout.notFound" : "workout.alreadyFinished"));
     revalidateAll();
     return { id: wid };
   });
@@ -91,7 +88,7 @@ export async function finishWorkoutAction(workoutId: string, input: { notes?: st
 export async function discardWorkoutAction(workoutId: string) {
   return run(async () => {
     const ok = await discardWorkout(db, id.parse(workoutId));
-    if (!ok) throw new UserError("Training konnte nicht verworfen werden.");
+    if (!ok) throw new UserError(msg("workout.discardFailed"));
     revalidateAll();
   });
 }
@@ -99,7 +96,7 @@ export async function discardWorkoutAction(workoutId: string) {
 export async function restoreWorkoutAction(workoutId: string) {
   return run(async () => {
     const ok = await restoreDiscardedWorkout(db, id.parse(workoutId));
-    if (!ok) throw new UserError("Wiederherstellen nicht möglich – es läuft bereits ein anderes Training.");
+    if (!ok) throw new UserError(msg("workout.restoreFailed"));
     revalidateAll();
   });
 }
@@ -107,7 +104,7 @@ export async function restoreWorkoutAction(workoutId: string) {
 export async function deleteWorkoutAction(workoutId: string) {
   return run(async () => {
     const ok = await deleteWorkout(db, id.parse(workoutId));
-    if (!ok) throw new UserError("Training nicht gefunden.");
+    if (!ok) throw new UserError(msg("workout.notFound"));
     revalidateAll();
   });
 }

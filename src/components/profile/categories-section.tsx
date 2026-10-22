@@ -9,11 +9,15 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input, Select } from "@/components/ui/input";
 import { Segmented } from "@/components/ui/segmented";
+import { fmt } from "@/lib/i18n";
+import { refName } from "@/lib/i18n/reference";
+import { useT } from "@/components/i18n-provider";
 
 type Item = { id: string; name: string; isBuiltin: boolean; category?: string; parentId?: string | null };
 
 export function CategoriesSection({ equipment, patterns, muscles }: { equipment: Item[]; patterns: Item[]; muscles: Item[] }) {
   const router = useRouter();
+  const t = useT();
   const [type, setType] = useState<"equipment" | "pattern" | "muscle">("equipment");
   const [name, setName] = useState("");
   const [category, setCategory] = useState("Sonstige");
@@ -23,18 +27,18 @@ export function CategoriesSection({ equipment, patterns, muscles }: { equipment:
 
   return (
     <Card className="p-4 sm:p-5">
-      <h2 className="text-[15px] font-semibold">Kategorien</h2>
-      <p className="mt-1 text-sm text-muted">Eigenes Equipment, Bewegungsmuster und Muskelgruppen ergänzen. Standardkategorien können nicht gelöscht werden.</p>
+      <h2 className="text-[15px] font-semibold">{t.categories.title}</h2>
+      <p className="mt-1 text-sm text-muted">{t.categories.text}</p>
       <Segmented
         className="mt-4"
         size="sm"
-        aria-label="Kategorie"
+        aria-label={t.categories.category}
         value={type}
         onChange={setType}
         options={[
-          { value: "equipment", label: "Equipment" },
-          { value: "pattern", label: "Bewegungsmuster" },
-          { value: "muscle", label: "Muskelgruppen" },
+          { value: "equipment", label: t.categories.equipment },
+          { value: "pattern", label: t.categories.patterns },
+          { value: "muscle", label: t.categories.muscles },
         ]}
       />
       <form
@@ -44,30 +48,32 @@ export function CategoriesSection({ equipment, patterns, muscles }: { equipment:
           const res = await addCategoryAction({ type, name, category, parentId: parentId || null });
           if (!res.ok) return void toast.error(res.error);
           setName("");
-          toast.success("Hinzugefügt");
+          toast.success(t.categories.added);
           router.refresh();
         }}
       >
-        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Name" aria-label="Name" className="min-w-40 flex-1" />
+        <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t.common.name} aria-label={t.common.name} className="min-w-40 flex-1" />
         {type === "equipment" ? (
-          <Select aria-label="Gruppe" value={category} onChange={(e) => setCategory(e.target.value)}>
+          <Select aria-label={t.categories.group} value={category} onChange={(e) => setCategory(e.target.value)}>
             {[...new Set(equipment.map((e) => e.category ?? "Sonstige"))].map((c) => (
-              <option key={c}>{c}</option>
+              <option key={c} value={c}>
+                {refName(t.equipmentCategories, c, c)}
+              </option>
             ))}
           </Select>
         ) : null}
         {type === "muscle" ? (
-          <Select aria-label="Obergruppe" value={parentId} onChange={(e) => setParentId(e.target.value)}>
-            <option value="">Eigene Hauptgruppe</option>
+          <Select aria-label={t.categories.parent} value={parentId} onChange={(e) => setParentId(e.target.value)}>
+            <option value="">{t.categories.ownMainGroup}</option>
             {parents.map((p) => (
               <option key={p.id} value={p.id}>
-                unter {p.name}
+                {fmt(t.categories.under, { name: p.name })}
               </option>
             ))}
           </Select>
         ) : null}
         <Button type="submit" disabled={name.trim().length < 2}>
-          <Plus className="size-4" /> Hinzufügen
+          <Plus className="size-4" /> {t.templates.add}
         </Button>
       </form>
       <ul className="mt-3 flex flex-wrap gap-1.5">
@@ -78,7 +84,7 @@ export function CategoriesSection({ equipment, patterns, muscles }: { equipment:
               <button
                 type="button"
                 className="grid size-6 place-items-center rounded-full text-subtle hover:text-danger"
-                aria-label={`${i.name} löschen`}
+                aria-label={fmt(t.categories.deleteItem, { name: i.name })}
                 onClick={async () => {
                   const res = await deleteCategoryAction(type, i.id);
                   if (!res.ok) return void toast.error(res.error);

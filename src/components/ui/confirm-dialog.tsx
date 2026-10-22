@@ -3,14 +3,15 @@
 import { useState, type ReactNode } from "react";
 import { Button } from "./button";
 import { Dialog, DialogContent } from "./dialog";
+import { useT } from "@/components/i18n-provider";
 
 export function ConfirmDialog({
   open,
   onOpenChange,
   title,
   description,
-  confirmLabel = "Bestätigen",
-  cancelLabel = "Abbrechen",
+  confirmLabel,
+  cancelLabel,
   destructive,
   onConfirm,
   children,
@@ -26,6 +27,7 @@ export function ConfirmDialog({
   children?: ReactNode;
 }) {
   const [busy, setBusy] = useState(false);
+  const t = useT();
   return (
     <Dialog open={open} onOpenChange={(v) => !busy && onOpenChange(v)}>
       <DialogContent
@@ -35,7 +37,7 @@ export function ConfirmDialog({
         footer={
           <>
             <Button variant="ghost" onClick={() => onOpenChange(false)} disabled={busy}>
-              {cancelLabel}
+              {cancelLabel ?? t.common.cancel}
             </Button>
             <Button
               variant={destructive ? "danger" : "primary"}
@@ -50,7 +52,7 @@ export function ConfirmDialog({
                 }
               }}
             >
-              {confirmLabel}
+              {confirmLabel ?? t.common.confirm}
             </Button>
           </>
         }

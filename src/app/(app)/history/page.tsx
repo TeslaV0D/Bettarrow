@@ -10,15 +10,19 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StartWorkoutButton } from "@/components/shell/start-workout-button";
 import { formatDay, formatDuration, formatVolume, type WeightUnit } from "@/lib/format";
 import { buttonClasses } from "@/components/ui/button";
+import { plural } from "@/lib/i18n";
+import { getT } from "@/server/i18n";
 
-export const metadata: Metadata = { title: "Verlauf" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT()).history.title };
+}
 
 const PAGE = 40;
 
 export default async function HistoryPage({ searchParams }: { searchParams: Promise<{ n?: string }> }) {
   const { n } = await searchParams;
   const limit = Math.min(2000, Math.max(PAGE, Number(n) || PAGE));
-  const [items, catalog, settings] = await Promise.all([listHistory({ limit: limit + 1 }), getCatalog(), getSettings()]);
+  const [t, items, catalog, settings] = await Promise.all([getT(), listHistory({ limit: limit + 1 }), getCatalog(), getSettings()]);
   const unit = settings.weightUnit as WeightUnit;
   const names = new Map(catalog.map((e) => [e.id, e.name]));
   const hasMore = items.length > limit;
@@ -30,10 +34,10 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
   }
   return (
     <>
-      <PageHeader title="Verlauf" subtitle="Alle abgeschlossenen Trainings" />
+      <PageHeader title={t.history.title} subtitle={t.history.subtitle} />
       {shown.length === 0 ? (
         <Card>
-          <EmptyState icon={History} title="Noch keine Trainings" description="Abgeschlossene Trainings erscheinen hier mit allen Sätzen und Ergebnissen." action={<StartWorkoutButton />} />
+          <EmptyState icon={History} title={t.history.empty} description={t.history.emptyText} action={<StartWorkoutButton />} />
         </Card>
       ) : (
         <div className="space-y-6">
@@ -42,7 +46,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
               <h2 className="mb-2 flex items-baseline justify-between text-sm font-medium text-muted">
                 <span>{formatDay(`${month}-01`, "month")}</span>
                 <span className="text-xs text-subtle">
-                  {list.length} {list.length === 1 ? "Training" : "Trainings"}
+                  {plural(t.units.workouts, list.length)}
                 </span>
               </h2>
               <ul className="divide-y divide-border overflow-hidden rounded-lg border border-border bg-surface">
@@ -56,7 +60,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{w.name}</p>
                         <p className="tabular truncate text-sm text-muted">
-                          {formatDuration(w.durationSeconds)} · {w.workingSets} Sätze · {formatVolume(w.volumeKg, unit)}
+                          {formatDuration(w.durationSeconds)} · {plural(t.units.sets, w.workingSets)} · {formatVolume(w.volumeKg, unit)}
                         </p>
                         <p className="truncate text-xs text-subtle">{w.exerciseIds.map((id) => names.get(id) ?? id).join(", ")}</p>
                       </div>
@@ -70,7 +74,7 @@ export default async function HistoryPage({ searchParams }: { searchParams: Prom
           {hasMore ? (
             <div className="flex justify-center">
               <Link href={`/history?n=${limit + PAGE}`} scroll={false} className={buttonClasses("secondary", "md")}>
-                Ältere laden
+                {t.history.loadOlder}
               </Link>
             </div>
           ) : null}

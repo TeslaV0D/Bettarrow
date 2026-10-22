@@ -2,6 +2,8 @@ import { asc, eq, inArray } from "drizzle-orm";
 import type { Db, DbOrTx } from "@/server/db/types";
 import * as s from "@/server/db/schema";
 import { templateInputSchema, type TemplateInput } from "@/lib/template-schema";
+import { msg } from "@/lib/i18n";
+import { UserError } from "@/server/errors";
 
 export type TemplateRow = typeof s.templates.$inferSelect;
 export type TemplateItemRow = typeof s.templateExercises.$inferSelect;
@@ -23,7 +25,7 @@ export async function saveTemplate(db: Db, id: string | null, raw: TemplateInput
     const ids = [...new Set(data.items.map((i) => i.exerciseId))];
     if (ids.length) {
       const found = await tx.select({ id: s.exercises.id }).from(s.exercises).where(inArray(s.exercises.id, ids));
-      if (found.length !== ids.length) throw new Error("Unbekannte Übung in der Vorlage");
+      if (found.length !== ids.length) throw new UserError(msg("templates.unknownExercise"));
     }
     let templateId = id;
     if (templateId) {
@@ -32,7 +34,7 @@ export async function saveTemplate(db: Db, id: string | null, raw: TemplateInput
         .set({ name: data.name, description: data.description || null, notes: data.notes || null, updatedAt: new Date() })
         .where(eq(s.templates.id, templateId))
         .returning({ id: s.templates.id });
-      if (!res.length) throw new Error("Vorlage nicht gefunden");
+      if (!res.length) throw new UserError(msg("templates.notFound"));
       await tx.delete(s.templateExercises).where(eq(s.templateExercises.templateId, templateId));
     } else {
       const [row] = await tx
@@ -61,7 +63,7 @@ export async function saveTemplate(db: Db, id: string | null, raw: TemplateInput
 
 export async function duplicateTemplate(db: Db, id: string): Promise<string> {
   const t = await getTemplate(db, id);
-  if (!t) throw new Error("Vorlage nicht gefunden");
+  if (!t) throw new UserError(msg("templates.notFound"));
   return saveTemplate(db, null, {
     name: `${t.name} (Kopie)`.slice(0, 80),
     description: t.description,

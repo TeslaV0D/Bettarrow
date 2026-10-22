@@ -1,22 +1,25 @@
 import { CalendarDays, ChartColumn, ClipboardList, Dumbbell, History, LayoutDashboard, UserRound, type LucideIcon } from "lucide-react";
 
+import type { Dict } from "@/lib/i18n";
+
 export interface NavItem {
   href: string;
-  label: string;
+  /** Key in the `nav` dictionary section. */
+  key: keyof Dict["nav"];
   icon: LucideIcon;
 }
 
 export const MAIN_NAV: NavItem[] = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/calendar", label: "Kalender", icon: CalendarDays },
-  { href: "/stats", label: "Statistik", icon: ChartColumn },
-  { href: "/profile", label: "Profil", icon: UserRound },
+  { href: "/", key: "dashboard", icon: LayoutDashboard },
+  { href: "/calendar", key: "calendar", icon: CalendarDays },
+  { href: "/stats", key: "stats", icon: ChartColumn },
+  { href: "/profile", key: "profile", icon: UserRound },
 ];
 
 export const LIBRARY_NAV: NavItem[] = [
-  { href: "/templates", label: "Vorlagen", icon: ClipboardList },
-  { href: "/exercises", label: "Übungen", icon: Dumbbell },
-  { href: "/history", label: "Verlauf", icon: History },
+  { href: "/templates", key: "templates", icon: ClipboardList },
+  { href: "/exercises", key: "exercises", icon: Dumbbell },
+  { href: "/history", key: "history", icon: History },
 ];
 
 export function isActive(pathname: string, href: string) {

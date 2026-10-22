@@ -1,0 +1,2 @@
+ALTER TABLE "settings" ADD COLUMN "locale" text DEFAULT 'de' NOT NULL;--> statement-breakpoint
+ALTER TABLE "settings" ADD CONSTRAINT "settings_locale_chk" CHECK ("settings"."locale" in ('de','en','ru','uk'));

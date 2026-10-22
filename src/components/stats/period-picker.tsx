@@ -2,20 +2,20 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { PERIOD_LABELS, type PeriodKey } from "@/lib/dates";
+import { PERIOD_KEYS, type PeriodKey } from "@/lib/dates";
 import { Button } from "@/components/ui/button";
 import { Input, Select } from "@/components/ui/input";
-
-const KEYS: PeriodKey[] = ["this_week", "last_week", "this_month", "last_month", "last_90", "this_year", "all", "custom"];
+import { useT } from "@/components/i18n-provider";
 
 export function PeriodPicker({ value, from, to }: { value: PeriodKey; from: string; to: string }) {
   const router = useRouter();
+  const tr = useT();
   const [f, setF] = useState(from);
   const [t, setT] = useState(to);
   return (
     <div className="flex flex-wrap items-end gap-2">
       <Select
-        aria-label="Zeitraum"
+        aria-label={tr.stats.period}
         value={value}
         onChange={(e) => {
           const k = e.target.value as PeriodKey;
@@ -23,9 +23,9 @@ export function PeriodPicker({ value, from, to }: { value: PeriodKey; from: stri
         }}
         className="min-w-44"
       >
-        {KEYS.map((k) => (
+        {PERIOD_KEYS.map((k) => (
           <option key={k} value={k}>
-            {PERIOD_LABELS[k]}
+            {tr.periods[k]}
           </option>
         ))}
       </Select>
@@ -37,10 +37,10 @@ export function PeriodPicker({ value, from, to }: { value: PeriodKey; from: stri
             router.push(`/stats?period=custom&from=${f}&to=${t}`);
           }}
         >
-          <Input type="date" aria-label="Von" value={f} onChange={(e) => setF(e.target.value)} className="w-40" />
+          <Input type="date" aria-label={tr.stats.from} value={f} onChange={(e) => setF(e.target.value)} className="w-40" />
           <span className="text-muted">–</span>
-          <Input type="date" aria-label="Bis" value={t} onChange={(e) => setT(e.target.value)} className="w-40" />
-          <Button type="submit">Anwenden</Button>
+          <Input type="date" aria-label={tr.stats.to} value={t} onChange={(e) => setT(e.target.value)} className="w-40" />
+          <Button type="submit">{tr.stats.apply}</Button>
         </form>
       ) : null}
     </div>

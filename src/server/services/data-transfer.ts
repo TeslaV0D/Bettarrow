@@ -7,6 +7,7 @@ import { z } from "zod";
 import type { Db } from "@/server/db/types";
 import * as s from "@/server/db/schema";
 import { seedReferenceData } from "@/server/seed";
+import { LOCALES, isLocale, msg } from "@/lib/i18n";
 
 export const EXPORT_FORMAT = "bettarrow-export";
 export const EXPORT_VERSION = 1;
@@ -32,6 +33,7 @@ const exportSchema = z.object({
     defaultBodyweightMode: z.string(),
     bodyweightInVolume: z.boolean(),
     secondaryMuscleWeight: z.number().min(0).max(1),
+    locale: z.enum(LOCALES).optional(),
   }),
   profile: z.object({
     name: z.string().nullable(),
@@ -223,6 +225,7 @@ export async function exportData(db: Db, now = new Date()): Promise<ExportData> 
       defaultBodyweightMode: settings.defaultBodyweightMode,
       bodyweightInVolume: settings.bodyweightInVolume,
       secondaryMuscleWeight: settings.secondaryMuscleWeight,
+      locale: isLocale(settings.locale) ? settings.locale : undefined,
     },
     profile: {
       name: profile.name,
@@ -305,11 +308,11 @@ export type ValidationResult = { ok: true; data: ExportData; summary: ImportSumm
 /** Validates structure, version and internal references of an export file. */
 export function validateExport(raw: unknown): ValidationResult {
   if (typeof raw === "object" && raw && (raw as { format?: unknown }).format !== EXPORT_FORMAT) {
-    return { ok: false, errors: ["Keine Bettarrow-Exportdatei (Feld „format“ fehlt oder ist falsch)."] };
+    return { ok: false, errors: [msg("data.notExport")] };
   }
   const v = (raw as { version?: unknown })?.version;
   if (typeof v === "number" && v > EXPORT_VERSION) {
-    return { ok: false, errors: [`Exportversion ${v} ist neuer als diese App (unterstützt bis ${EXPORT_VERSION}). Bitte App aktualisieren.`] };
+    return { ok: false, errors: [msg("data.versionTooNew")] };
   }
   const parsed = exportSchema.safeParse(raw);
   if (!parsed.success) {

@@ -10,29 +10,32 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger } from "@/components/ui/dropdown";
 import { deleteWorkoutAction } from "@/server/actions/workouts";
 import { useStartWorkout } from "@/components/shell/use-start-workout";
+import { fmt } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 
 export function WorkoutActions({ id, name }: { id: string; name: string }) {
   const router = useRouter();
+  const t = useT();
   const { start, pending } = useStartWorkout();
   const [confirm, setConfirm] = useState(false);
   return (
     <div className="flex items-center gap-2">
       <Button variant="secondary" loading={pending !== null} onClick={() => start({ repeatWorkoutId: id })}>
         {pending === null ? <Repeat className="size-4" aria-hidden /> : null}
-        Erneut durchführen
+        {t.history.repeat}
       </Button>
-      <Link href={`/history/${id}/edit`} className={buttonClasses("secondary", "icon")} aria-label="Bearbeiten" title="Bearbeiten">
+      <Link href={`/history/${id}/edit`} className={buttonClasses("secondary", "icon")} aria-label={t.common.edit} title={t.common.edit}>
         <Pencil className="size-4" />
       </Link>
       <Dropdown>
         <DropdownTrigger asChild>
-          <Button size="icon" variant="ghost" aria-label="Weitere Aktionen">
+          <Button size="icon" variant="ghost" aria-label={t.exercises.moreActions}>
             <Ellipsis className="size-4" />
           </Button>
         </DropdownTrigger>
         <DropdownContent>
           <DropdownItem icon={Trash2} destructive onSelect={() => setConfirm(true)}>
-            Training löschen
+            {t.history.delete}
           </DropdownItem>
         </DropdownContent>
       </Dropdown>
@@ -40,13 +43,13 @@ export function WorkoutActions({ id, name }: { id: string; name: string }) {
         open={confirm}
         onOpenChange={setConfirm}
         destructive
-        title={`„${name}“ endgültig löschen?`}
-        description="Alle Sätze dieses Trainings werden dauerhaft gelöscht. Statistiken, Bestleistungen und Vorwerte werden neu berechnet. Das kann nicht rückgängig gemacht werden (außer über ein Backup)."
-        confirmLabel="Endgültig löschen"
+        title={fmt(t.history.deleteTitle, { name })}
+        description={t.history.deleteText}
+        confirmLabel={t.history.deleteConfirm}
         onConfirm={async () => {
           const res = await deleteWorkoutAction(id);
           if (!res.ok) return void toast.error(res.error);
-          toast.success("Training gelöscht");
+          toast.success(t.history.deleted);
           router.replace("/history");
           router.refresh();
         }}

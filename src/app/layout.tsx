@@ -2,15 +2,20 @@ import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import { Toaster } from "sonner";
+import { I18nProvider } from "@/components/i18n-provider";
+import { getLocale, getT } from "@/server/i18n";
 import "./globals.css";
 
-export const metadata: Metadata = {
-  title: { default: "Bettarrow", template: "%s · Bettarrow" },
-  description: "Persönliches Trainingstagebuch für Krafttraining",
-  applicationName: "Bettarrow",
-  appleWebApp: { capable: true, title: "Bettarrow", statusBarStyle: "black-translucent" },
-  robots: { index: false, follow: false },
-};
+export async function generateMetadata(): Promise<Metadata> {
+  const t = await getT();
+  return {
+    title: { default: "Bettarrow", template: "%s · Bettarrow" },
+    description: t.meta.description,
+    applicationName: "Bettarrow",
+    appleWebApp: { capable: true, title: "Bettarrow", statusBarStyle: "black-translucent" },
+    robots: { index: false, follow: false },
+  };
+}
 
 export const viewport: Viewport = {
   themeColor: "#101210",
@@ -20,11 +25,12 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  const locale = await getLocale();
   return (
-    <html lang="de" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html lang={locale} className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className="min-h-dvh">
-        {children}
+        <I18nProvider locale={locale}>{children}</I18nProvider>
         <Toaster
           theme="dark"
           position="top-center"

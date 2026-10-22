@@ -4,9 +4,11 @@ import { memo, useEffect, useRef, useState } from "react";
 import { Check, MessageSquare, SlidersHorizontal, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatClock, formatNumber, kgToUnit, unitToKg, type WeightUnit } from "@/lib/format";
-import { SET_TYPE_LABELS, SET_TYPE_SHORT, SET_TYPES, computeLoad, type LoadMode, type SetType, type Tracking } from "@/lib/training";
+import { SET_TYPES, computeLoad, type LoadMode, type SetType, type Tracking } from "@/lib/training";
 import { parseDecimal, parseDurationInput, parseIntStrict, type LSet, type PreviousSet } from "@/lib/workout-reducer";
 import { Dropdown, DropdownContent, DropdownItem, DropdownLabel, DropdownSeparator, DropdownTrigger } from "@/components/ui/dropdown";
+import { fmt, type Dict } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 
 export interface RowLayout {
   showWeight: boolean;
@@ -36,15 +38,15 @@ function fmtWeight(kg: number | null, unit: WeightUnit) {
   return kg == null ? "" : formatNumber(kgToUnit(kg, unit), 2);
 }
 
-export function formatPrevious(p: PreviousSet | undefined, tracking: Tracking, loadMode: LoadMode, unit: WeightUnit): string {
+export function formatPrevious(p: PreviousSet | undefined, tracking: Tracking, loadMode: LoadMode, unit: WeightUnit, t: Dict): string {
   if (!p) return "–";
   if (tracking === "duration") {
-    const t = p.durationSeconds != null ? formatClock(p.durationSeconds) : "–";
-    return p.weightKg ? `${fmtWeight(p.weightKg, unit)} × ${t}` : t;
+    const time = p.durationSeconds != null ? formatClock(p.durationSeconds) : "–";
+    return p.weightKg ? `${fmtWeight(p.weightKg, unit)} × ${time}` : time;
   }
   const reps = p.reps ?? "–";
-  if (loadMode === "bodyweight" || loadMode === "none") return `${reps} Wdh.`;
-  if (p.weightKg == null) return loadMode === "external" ? `${reps} Wdh.` : `KG × ${reps}`;
+  if (loadMode === "bodyweight" || loadMode === "none") return fmt(t.common.repsShort, { n: reps });
+  if (p.weightKg == null) return loadMode === "external" ? fmt(t.common.repsShort, { n: reps }) : `${t.setRow.bwShort} × ${reps}`;
   const sign = loadMode === "bodyweight_plus" ? "+" : loadMode === "bodyweight_minus" ? "−" : "";
   return `${sign}${fmtWeight(p.weightKg, unit)} × ${reps}`;
 }
@@ -157,6 +159,7 @@ export const SetRow = memo(function SetRow({
   onDetails,
 }: SetRowProps) {
   const done = set.completed;
+  const t = useT();
   const fmtW = (v: number | null) => fmtWeight(v, unit);
   const parseW = (t: string) => {
     const v = parseDecimal(t);
@@ -188,7 +191,7 @@ export const SetRow = memo(function SetRow({
           <button
             type="button"
             className={cn("tabular grid h-11 place-items-center rounded-sm text-sm font-semibold hover:bg-surface-3", typeTone[set.setType])}
-            aria-label={`Satz ${label}, ${SET_TYPE_LABELS[set.setType]} – Optionen`}
+            aria-label={fmt(t.setRow.options, { label, type: t.setTypes[set.setType] })}
           >
             <span className="relative">
               {label}
@@ -197,20 +200,20 @@ export const SetRow = memo(function SetRow({
           </button>
         </DropdownTrigger>
         <DropdownContent align="start">
-          <DropdownLabel>Satztyp</DropdownLabel>
-          {SET_TYPES.map((t) => (
-            <DropdownItem key={t} onSelect={() => onUpdate(exId, set.id, { setType: t })}>
-              <span className={cn("w-4 text-center text-xs font-bold", typeTone[t])}>{SET_TYPE_SHORT[t] || "#"}</span>
-              {SET_TYPE_LABELS[t]}
-              {set.setType === t ? <Check className="ml-auto size-4 text-accent" /> : null}
+          <DropdownLabel>{t.setRow.setType}</DropdownLabel>
+          {SET_TYPES.map((st) => (
+            <DropdownItem key={st} onSelect={() => onUpdate(exId, set.id, { setType: st })}>
+              <span className={cn("w-4 text-center text-xs font-bold", typeTone[st])}>{t.setTypesShort[st] || "#"}</span>
+              {t.setTypes[st]}
+              {set.setType === st ? <Check className="ml-auto size-4 text-accent" /> : null}
             </DropdownItem>
           ))}
           <DropdownSeparator />
           <DropdownItem icon={effortMetric === "none" ? MessageSquare : SlidersHorizontal} onSelect={() => onDetails(exId, set.id)}>
-            {effortMetric === "none" ? "Notiz" : `${effortMetric.toUpperCase()} & Notiz`}
+            {effortMetric === "none" ? t.common.note : fmt(t.setRow.effortAndNote, { metric: effortMetric.toUpperCase() })}
           </DropdownItem>
           <DropdownItem icon={Trash2} destructive onSelect={() => onRemove(exId, set.id)}>
-            Satz löschen
+            {t.setRow.deleteSet}
           </DropdownItem>
         </DropdownContent>
       </Dropdown>
@@ -219,7 +222,7 @@ export const SetRow = memo(function SetRow({
         type="button"
         className="truncate text-left text-sm text-subtle hover:text-muted disabled:hover:text-subtle"
         disabled={!previous || done}
-        title="Vorherige Werte übernehmen"
+        title={t.setRow.usePrevious}
         onClick={() =>
           previous &&
           onUpdate(exId, set.id, {
@@ -229,7 +232,7 @@ export const SetRow = memo(function SetRow({
           })
         }
       >
-        {formatPrevious(previous, layout.tracking, loadMode, unit)}
+        {formatPrevious(previous, layout.tracking, loadMode, unit, t)}
       </button>
 
       {layout.showWeight ? (
@@ -241,7 +244,7 @@ export const SetRow = memo(function SetRow({
               parse={parseW}
               onCommit={(v) => onUpdate(exId, set.id, { weightKg: v })}
               placeholder={previous?.weightKg != null ? fmtW(previous.weightKg) : loadMode === "external" ? unit : "0"}
-              ariaLabel={loadMode === "bodyweight_plus" ? "Zusatzgewicht" : loadMode === "bodyweight_minus" ? "Unterstützung" : "Gewicht"}
+              ariaLabel={loadMode === "bodyweight_plus" ? t.setRow.extraWeight : loadMode === "bodyweight_minus" ? t.setRow.assistance : t.common.weight}
               inputMode="decimal"
               done={done}
             />
@@ -252,8 +255,8 @@ export const SetRow = memo(function SetRow({
             ) : null}
           </div>
         ) : (
-          <span className="tabular text-center text-sm text-muted" title="Körpergewicht × Faktor">
-            {load != null ? fmtW(load) : "KG"}
+          <span className="tabular text-center text-sm text-muted" title={t.setRow.bwTimesFactor}>
+            {load != null ? fmtW(load) : t.setRow.bwShort}
           </span>
         )
       ) : null}
@@ -265,7 +268,7 @@ export const SetRow = memo(function SetRow({
           parse={parseDurationInput}
           onCommit={(v) => onUpdate(exId, set.id, { durationSeconds: v })}
           placeholder={previous?.durationSeconds != null ? fmtDur(previous.durationSeconds) : "0:00"}
-          ariaLabel="Dauer (m:ss oder Sekunden)"
+          ariaLabel={t.setRow.durationLabel}
           inputMode="numeric"
           done={done}
         />
@@ -276,7 +279,7 @@ export const SetRow = memo(function SetRow({
           parse={parseIntStrict}
           onCommit={(v) => onUpdate(exId, set.id, { reps: v })}
           placeholder={previous?.reps != null ? String(previous.reps) : "0"}
-          ariaLabel="Wiederholungen"
+          ariaLabel={t.setRow.repsLabel}
           inputMode="numeric"
           done={done}
         />
@@ -301,7 +304,7 @@ export const SetRow = memo(function SetRow({
         type="button"
         onClick={() => onToggle(exId, set.id)}
         aria-pressed={done}
-        aria-label={done ? `Satz ${label} als offen markieren` : `Satz ${label} abhaken`}
+        aria-label={fmt(done ? t.setRow.markOpen : t.setRow.markDone, { label })}
         className={cn(
           "grid size-11 place-items-center rounded-md border transition-colors active:scale-95",
           done ? "border-accent bg-accent text-accent-ink" : "border-border-strong bg-surface-2 text-subtle hover:text-text",

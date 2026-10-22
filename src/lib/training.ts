@@ -19,22 +19,6 @@ export type SetType = (typeof SET_TYPES)[number];
 export const TRACKING_TYPES = ["reps", "duration"] as const;
 export type Tracking = (typeof TRACKING_TYPES)[number];
 
-export const LOAD_MODE_LABELS: Record<LoadMode, string> = {
-  external: "Externe Last",
-  bodyweight: "Körpergewicht",
-  bodyweight_plus: "Körpergewicht + Zusatzgewicht",
-  bodyweight_minus: "Körpergewicht − Unterstützung",
-  none: "Ohne Last (nur Wdh./Zeit)",
-};
-
-export const LOAD_MODE_HINTS: Record<LoadMode, string> = {
-  external: "Last = eingetragenes Gewicht.",
-  bodyweight: "Last = Körpergewicht × Faktor. Kein Gewicht einzutragen.",
-  bodyweight_plus: "Last = Körpergewicht × Faktor + Zusatzgewicht (z. B. Gewichtsgürtel).",
-  bodyweight_minus: "Last = Körpergewicht × Faktor − Unterstützung (z. B. Gegengewicht, Band).",
-  none: "Keine Last erfasst (z. B. Crunches, Bänder). Zählt als Satz, aber nicht zum Volumen.",
-};
-
 /** Label of the weight input column for a load mode, or null if no weight is entered. */
 export function weightInputLabel(mode: LoadMode): string | null {
   switch (mode) {
@@ -48,20 +32,6 @@ export function weightInputLabel(mode: LoadMode): string | null {
       return null;
   }
 }
-
-export const SET_TYPE_LABELS: Record<SetType, string> = {
-  working: "Arbeitssatz",
-  warmup: "Aufwärmsatz",
-  dropset: "Dropset",
-  failure: "Bis Muskelversagen",
-};
-
-export const SET_TYPE_SHORT: Record<SetType, string> = {
-  working: "",
-  warmup: "W",
-  dropset: "D",
-  failure: "F",
-};
 
 export function isBodyweightMode(mode: LoadMode): boolean {
   return mode === "bodyweight" || mode === "bodyweight_plus" || mode === "bodyweight_minus";
@@ -258,14 +228,6 @@ export function buildPrefillSets(
 // ---------------------------------------------------------------------------
 
 export type PrKind = "max_load" | "max_reps_at_load" | "max_set_volume" | "e1rm" | "max_reps";
-
-export const PR_LABELS: Record<PrKind, string> = {
-  max_load: "Höchstes Gewicht",
-  max_reps_at_load: "Wiederholungsrekord",
-  max_set_volume: "Höchstes Satzvolumen",
-  e1rm: "Geschätztes 1RM",
-  max_reps: "Meiste Wiederholungen",
-};
 
 export interface PrSet {
   loadKg: number | null;

@@ -16,6 +16,8 @@ import {
 import { todayIn, type YMD } from "@/lib/dates";
 import { syncPayloadSchema, type SyncResult } from "@/lib/workout-schema";
 import { getCalendarRange, materializeEntry } from "./calendar";
+import { msg } from "@/lib/i18n";
+import { UserError } from "@/server/errors";
 
 export type WorkoutStatus = "active" | "completed" | "discarded";
 
@@ -136,7 +138,7 @@ function isUniqueViolation(err: unknown): boolean {
 export async function startWorkout(
   db: Db,
   input: StartInput,
-  ctx: { timezone: string; now?: Date },
+  ctx: { timezone: string; now?: Date; /** Name of a workout without template or plan, in the UI language. */ freeName?: string },
 ): Promise<{ id: string; existing: boolean }> {
   const now = ctx.now ?? new Date();
   try {
@@ -152,15 +154,15 @@ export async function startWorkout(
       if (input.plannedEntryId) {
         plannedEntryId = await materializeEntry(tx, input.plannedEntryId);
         const [entry] = await tx.select().from(s.plannedEntries).where(eq(s.plannedEntries.id, plannedEntryId)).limit(1);
-        if (!entry) throw new Error("Geplanter Eintrag nicht gefunden");
-        if (entry.kind !== "workout") throw new Error("Ein Ruhetag kann nicht gestartet werden");
+        if (!entry) throw new UserError(msg("workout.plannedNotFound"));
+        if (entry.kind !== "workout") throw new UserError(msg("workout.restCannotStart"));
         templateId = templateId ?? entry.templateId;
         name = name ?? entry.title;
       }
 
       if (input.repeatWorkoutId) {
         const [src] = await tx.select({ name: s.workouts.name, templateId: s.workouts.templateId }).from(s.workouts).where(eq(s.workouts.id, input.repeatWorkoutId)).limit(1);
-        if (!src) throw new Error("Training nicht gefunden");
+        if (!src) throw new UserError(msg("workout.notFound"));
         name = name ?? src.name;
         templateId = templateId ?? src.templateId;
         const rows = await tx
@@ -175,7 +177,7 @@ export async function startWorkout(
         planned = rows.map((r) => ({ exerciseId: r.exerciseId, targetSets: r.setCount || null, repMin: null, restSeconds: r.restSeconds, notes: null }));
       } else if (templateId) {
         const [tpl] = await tx.select({ name: s.templates.name }).from(s.templates).where(eq(s.templates.id, templateId)).limit(1);
-        if (!tpl) throw new Error("Vorlage nicht gefunden");
+        if (!tpl) throw new UserError(msg("templates.notFound"));
         name = name ?? tpl.name;
         planned = await tx
           .select({
@@ -207,7 +209,7 @@ export async function startWorkout(
       const [workout] = await tx
         .insert(s.workouts)
         .values({
-          name: name ?? "Freies Training",
+          name: name ?? ctx.freeName ?? "Freies Training",
           templateId,
           plannedEntryId,
           status: "active",
@@ -556,7 +558,7 @@ export async function syncWorkout(db: Db, id: string, raw: unknown): Promise<Syn
 export async function addExercisesToWorkout(db: Db, workoutId: string, exerciseIds: string[]) {
   return db.transaction(async (tx) => {
     const [w] = await tx.select({ bodyweightKg: s.workouts.bodyweightKg }).from(s.workouts).where(eq(s.workouts.id, workoutId)).limit(1);
-    if (!w) throw new Error("Training nicht gefunden");
+    if (!w) throw new UserError(msg("workout.notFound"));
     const [{ max }] = await tx
       .select({ max: sql<number>`coalesce(max(${s.workoutExercises.position}), -1)::int` })
       .from(s.workoutExercises)

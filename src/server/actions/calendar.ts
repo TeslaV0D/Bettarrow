@@ -6,9 +6,11 @@ import { db } from "@/server/db";
 import { isYmd, addDays } from "@/lib/dates";
 import { getToday } from "@/server/queries/settings";
 import { createRule, endRule, moveEntry, planEntry, restoreEntryStatus, setEntryStatus, updateEntry } from "@/server/services/calendar";
-import { run, UserError } from "./_util";
+import { msg } from "@/lib/i18n";
+import { run } from "./_util";
+import { getT } from "@/server/i18n";
 
-const ymd = z.string().refine(isYmd, "Ungültiges Datum");
+const ymd = z.string().refine(isYmd, msg("validation.invalidDate"));
 const entryId = z.string().min(1).max(100);
 const kind = z.enum(["workout", "rest"]);
 
@@ -16,19 +18,13 @@ function done() {
   revalidatePath("/", "layout");
 }
 
-function userErrors<T>(fn: () => Promise<T>) {
-  return fn().catch((err) => {
-    if (err instanceof Error && /nicht gefunden|können nicht/.test(err.message)) throw new UserError(err.message);
-    throw err;
-  });
-}
-
 export async function planEntryAction(input: { date: string; kind: "workout" | "rest"; templateId?: string | null; title?: string | null; notes?: string | null }) {
   return run(async () => {
     const data = z
       .object({ date: ymd, kind, templateId: z.uuid().nullish(), title: z.string().trim().max(120).nullish(), notes: z.string().trim().max(1000).nullish() })
       .parse(input);
-    const id = await planEntry(db, data);
+    const t = await getT();
+    const id = await planEntry(db, data, { workout: t.calendar.workout, rest: t.calendar.restDay });
     done();
     return { id };
   });
@@ -37,7 +33,7 @@ export async function planEntryAction(input: { date: string; kind: "workout" | "
 export async function updateEntryAction(id: string, patch: { templateId?: string | null; title?: string; notes?: string | null }) {
   return run(async () => {
     const data = z.object({ templateId: z.uuid().nullish(), title: z.string().trim().max(120).optional(), notes: z.string().trim().max(1000).nullish() }).parse(patch);
-    const real = await userErrors(() => updateEntry(db, entryId.parse(id), data));
+    const real = await updateEntry(db, entryId.parse(id), data);
     done();
     return { id: real };
   });
@@ -45,7 +41,7 @@ export async function updateEntryAction(id: string, patch: { templateId?: string
 
 export async function moveEntryAction(id: string, date: string) {
   return run(async () => {
-    const real = await userErrors(() => moveEntry(db, entryId.parse(id), ymd.parse(date)));
+    const real = await moveEntry(db, entryId.parse(id), ymd.parse(date));
     done();
     return { id: real };
   });
@@ -54,7 +50,7 @@ export async function moveEntryAction(id: string, date: string) {
 /** skip = mark as not done ("ausgefallen"), planned = re-plan, cancelled = remove (undo possible). */
 export async function setEntryStatusAction(id: string, status: "planned" | "skipped" | "cancelled") {
   return run(async () => {
-    const res = await userErrors(() => setEntryStatus(db, entryId.parse(id), z.enum(["planned", "skipped", "cancelled"]).parse(status)));
+    const res = await setEntryStatus(db, entryId.parse(id), z.enum(["planned", "skipped", "cancelled"]).parse(status));
     done();
     return res;
   });
@@ -74,13 +70,14 @@ export async function createRuleAction(input: { kind: "workout" | "rest"; templa
         kind,
         templateId: z.uuid().nullish(),
         title: z.string().trim().max(120).nullish(),
-        weekdays: z.array(z.number().int().min(1).max(7)).min(1, "Mindestens einen Wochentag wählen").max(7),
+        weekdays: z.array(z.number().int().min(1).max(7)).min(1, msg("validation.chooseWeekday")).max(7),
         startDate: ymd,
         endDate: ymd.nullish(),
       })
-      .refine((d) => !d.endDate || d.endDate >= d.startDate, { message: "Ende liegt vor dem Start", path: ["endDate"] })
+      .refine((d) => !d.endDate || d.endDate >= d.startDate, { message: msg("validation.endBeforeStart"), path: ["endDate"] })
       .parse(input);
-    const id = await createRule(db, data);
+    const t = await getT();
+    const id = await createRule(db, data, { workout: t.calendar.workout, rest: t.calendar.restDay });
     done();
     return { id };
   });

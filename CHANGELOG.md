@@ -2,6 +2,21 @@
 
 Alle relevanten Änderungen. Format angelehnt an [Keep a Changelog](https://keepachangelog.com/de/1.1.0/).
 
+## [1.3.0] – 2026-10-22
+
+### Hinzugefügt
+- Oberfläche in vier Sprachen: Deutsch, Englisch, Russisch und Ukrainisch. Umschalter unter Profil → Einstellungen → Sprache (wirkt sofort und für alle Geräte, gespeichert in `settings.locale`, Migration `0001_settings_locale`).
+  - Zahlen, Datumsangaben, relative Tage, Pluralformen sowie Server- und Validierungsmeldungen folgen der gewählten Sprache.
+  - Eingebaute Muskelgruppen, Equipment und Bewegungsmuster werden übersetzt; eigene Kategorien behalten ihren Namen.
+  - Der Export enthält die Sprache (`settings.locale`, optional – ältere Exporte bleiben importierbar).
+
+### Behoben
+- Übung zu Vorlage oder Training hinzufügen führte zu „This page couldn’t load“, wenn die App per `http://<LAN-IP>:3000` geöffnet wurde: `crypto.randomUUID` gibt es nur in sicheren Kontexten (HTTPS/localhost). IDs werden jetzt mit Fallback auf `crypto.getRandomValues` erzeugt.
+- iOS/Safari: Inhalte lagen unter der Statusleiste bzw. Notch. Seiten, der fixierte Workout-Kopf, Toasts, Login und Dialoge halten jetzt `safe-area-inset-top` frei.
+
+### Bekannte Einschränkungen
+- Namen, Beschreibungen und Ausführungshinweise der Standardübungen sind weiterhin deutsch (Inhalte der Übungsdatenbank, nicht Teil der Oberfläche).
+
 ## [1.2.0] – 2026-10-21
 
 Deployment über GitHub Actions → GitHub Container Registry → Portainer CE.

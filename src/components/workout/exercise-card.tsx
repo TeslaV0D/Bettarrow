@@ -5,12 +5,14 @@ import { memo, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, Ellipsis, Info, Plus, Replace, StickyNote, Timer, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { CatalogExercise } from "@/lib/exercise-search";
-import { formatClock, formatDay, formatWeight, type WeightUnit } from "@/lib/format";
+import { formatClock, formatDay, formatNumber, formatWeight, type WeightUnit } from "@/lib/format";
 import { isBodyweightMode, weightInputLabel } from "@/lib/training";
 import type { LExercise, LSet } from "@/lib/workout-reducer";
 import { Button } from "@/components/ui/button";
 import { Dropdown, DropdownContent, DropdownItem, DropdownSeparator, DropdownTrigger } from "@/components/ui/dropdown";
 import { GRID_CLASS, SetRow, gridStyle, type RowLayout } from "./set-row";
+import { fmt } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 
 export interface ExerciseCardProps {
   ex: LExercise;
@@ -37,6 +39,7 @@ export interface ExerciseCardProps {
 export const ExerciseCard = memo(function ExerciseCard(p: ExerciseCardProps) {
   const { ex, meta, unit, effortMetric } = p;
   const router = useRouter();
+  const t = useT();
   const [editingNote, setEditingNote] = useState(false);
   const wLabel = weightInputLabel(ex.loadMode);
   const layout: RowLayout = useMemo(
@@ -50,7 +53,7 @@ export const ExerciseCard = memo(function ExerciseCard(p: ExerciseCardProps) {
   );
   const doneCount = ex.sets.filter((s) => s.completed).length;
   let workingNo = 0;
-  const labels = ex.sets.map((s) => (s.setType === "warmup" ? "W" : String(++workingNo)));
+  const labels = ex.sets.map((s) => (s.setType === "warmup" ? t.setTypesShort.warmup : String(++workingNo)));
   const rest = ex.restSeconds ?? meta?.restSeconds ?? p.defaultRest;
 
   return (
@@ -64,7 +67,7 @@ export const ExerciseCard = memo(function ExerciseCard(p: ExerciseCardProps) {
             {p.subtitle}
             <span className="text-subtle">
               {" "}
-              · {doneCount}/{ex.sets.length} Sätze
+              · {fmt(t.exerciseCard.setsDone, { done: doneCount, total: ex.sets.length })}
             </span>
           </p>
         </div>
@@ -72,38 +75,38 @@ export const ExerciseCard = memo(function ExerciseCard(p: ExerciseCardProps) {
           type="button"
           onClick={() => p.onRest(ex.id)}
           className="tabular flex h-9 items-center gap-1 rounded-sm px-2 text-xs font-medium text-muted hover:bg-surface-2 hover:text-text"
-          aria-label={`Ruhezeit ${formatClock(rest)} ändern`}
+          aria-label={fmt(t.exerciseCard.changeRest, { time: formatClock(rest) })}
         >
           <Timer className="size-3.5" aria-hidden />
           {formatClock(rest)}
         </button>
         <Dropdown>
           <DropdownTrigger asChild>
-            <Button size="icon-sm" variant="ghost" aria-label={`Aktionen für ${meta?.name ?? "Übung"}`}>
+            <Button size="icon-sm" variant="ghost" aria-label={fmt(t.exerciseCard.actionsFor, { name: meta?.name ?? t.common.exercise })}>
               <Ellipsis className="size-4" />
             </Button>
           </DropdownTrigger>
           <DropdownContent>
             <DropdownItem icon={StickyNote} onSelect={() => setEditingNote(true)}>
-              Notiz
+              {t.common.note}
             </DropdownItem>
             <DropdownItem icon={Replace} onSelect={() => p.onReplace(ex.id)}>
-              Übung tauschen
+              {t.workout.replaceExercise}
             </DropdownItem>
             <DropdownItem icon={ArrowUp} disabled={p.index === 0} onSelect={() => p.onMove(ex.id, -1)}>
-              Nach oben
+              {t.exerciseCard.moveUp}
             </DropdownItem>
             <DropdownItem icon={ArrowDown} disabled={p.index === p.count - 1} onSelect={() => p.onMove(ex.id, 1)}>
-              Nach unten
+              {t.exerciseCard.moveDown}
             </DropdownItem>
             {meta ? (
               <DropdownItem icon={Info} onSelect={() => router.push(`/exercises/${meta.id}`)}>
-                Übungsdetails & Verlauf
+                {t.exerciseCard.detailsHistory}
               </DropdownItem>
             ) : null}
             <DropdownSeparator />
             <DropdownItem icon={Trash2} destructive onSelect={() => p.onRemove(ex.id)}>
-              Übung entfernen
+              {t.exerciseCard.remove}
             </DropdownItem>
           </DropdownContent>
         </Dropdown>
@@ -120,8 +123,8 @@ export const ExerciseCard = memo(function ExerciseCard(p: ExerciseCardProps) {
             }}
             rows={1}
             maxLength={2000}
-            placeholder="Notiz zur Übung"
-            aria-label="Notiz zur Übung"
+            placeholder={t.exerciseCard.notePlaceholder}
+            aria-label={t.exerciseCard.notePlaceholder}
             className="w-full resize-none rounded-sm border border-transparent bg-warning-soft/60 px-2 py-1.5 text-sm text-text placeholder:text-subtle focus:border-warning/40 focus:outline-none"
           />
         </div>
@@ -130,10 +133,12 @@ export const ExerciseCard = memo(function ExerciseCard(p: ExerciseCardProps) {
       {isBodyweightMode(ex.loadMode) ? (
         <p className="px-3 pt-1.5 text-xs text-subtle sm:px-4">
           {p.bodyweightKg != null
-            ? `Körpergewicht ${formatWeight(p.bodyweightKg, unit)}${ex.bodyweightFactor !== 1 ? ` × ${String(ex.bodyweightFactor).replace(".", ",")}` : ""}${
-                ex.loadMode === "bodyweight_plus" ? " + Zusatzgewicht" : ex.loadMode === "bodyweight_minus" ? " − Unterstützung" : ""
-              } = Gesamtlast`
-            : "Kein Körpergewicht hinterlegt – Gesamtlast kann nicht berechnet werden."}
+            ? fmt(t.exerciseCard.bodyweightFormula, {
+                weight: formatWeight(p.bodyweightKg, unit),
+                factor: ex.bodyweightFactor !== 1 ? ` × ${formatNumber(ex.bodyweightFactor, 3)}` : "",
+                extra: ex.loadMode === "bodyweight_plus" ? t.exerciseCard.plusExtra : ex.loadMode === "bodyweight_minus" ? t.exerciseCard.minusAssist : "",
+              })
+            : t.exerciseCard.noBodyweight}
         </p>
       ) : null}
 
@@ -143,13 +148,13 @@ export const ExerciseCard = memo(function ExerciseCard(p: ExerciseCardProps) {
           style={gridStyle(layout)}
           aria-hidden
         >
-          <span className="text-center">Satz</span>
+          <span className="text-center">{t.exerciseCard.setColumn}</span>
           <span>
-            Vorher
+            {t.exerciseCard.previous}
             {ex.previous ? <span className="hidden normal-case tracking-normal sm:inline"> · {formatDay(ex.previous.date, "dayMonth")}</span> : null}
           </span>
           {layout.showWeight ? <span className="text-center">{layout.weightEditable ? wLabel?.replace("kg", unit) : unit}</span> : null}
-          <span className="text-center">{ex.tracking === "duration" ? "Zeit" : "Wdh."}</span>
+          <span className="text-center">{ex.tracking === "duration" ? t.common.time : t.common.reps}</span>
           {layout.showEffort ? <span className="hidden text-center sm:block">{effortMetric.toUpperCase()}</span> : null}
           <span />
         </div>
@@ -180,7 +185,7 @@ export const ExerciseCard = memo(function ExerciseCard(p: ExerciseCardProps) {
           className={cn("mt-1 flex h-11 w-full items-center justify-center gap-1.5 rounded-md text-sm font-medium text-muted hover:bg-surface-2 hover:text-text")}
         >
           <Plus className="size-4" aria-hidden />
-          Satz hinzufügen
+          {t.exerciseCard.addSet}
         </button>
       </div>
     </section>

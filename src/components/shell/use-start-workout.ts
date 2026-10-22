@@ -4,12 +4,14 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
 import { startWorkoutAction } from "@/server/actions/workouts";
+import { useT } from "@/components/i18n-provider";
 
 export type StartInput = Parameters<typeof startWorkoutAction>[0];
 
 /** Starts (or resumes) a workout and navigates to the live view. */
 export function useStartWorkout() {
   const router = useRouter();
+  const t = useT();
   const [pending, setPending] = useState<string | null>(null);
   async function start(input: StartInput, key = "default") {
     setPending(key);
@@ -19,7 +21,7 @@ export function useStartWorkout() {
         toast.error(res.error);
         return false;
       }
-      if (res.data.existing) toast("Es läuft bereits ein Training – es wird fortgesetzt.");
+      if (res.data.existing) toast(t.start.alreadyRunning);
       router.push("/workout");
       return true;
     } finally {

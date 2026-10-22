@@ -9,6 +9,7 @@ import { exerciseInputSchema, type ExerciseInput } from "@/lib/exercise-schema";
 import { BUILTIN_EXERCISES } from "@/server/seed";
 import { getExerciseUsage } from "@/server/queries/exercises";
 import { run, UserError } from "./_util";
+import { msg } from "@/lib/i18n";
 
 const exerciseId = z.string().min(1).max(120);
 
@@ -28,13 +29,13 @@ async function validateRefs(data: ReturnType<typeof exerciseInputSchema.parse>) 
   const muscles = await db.select({ id: s.muscleGroups.id, parentId: s.muscleGroups.parentId }).from(s.muscleGroups);
   const known = new Set(muscles.map((m) => m.id));
   const parents = new Set(muscles.map((m) => m.parentId).filter(Boolean));
-  for (const id of muscleIds) if (!known.has(id)) throw new UserError("Unbekannte Muskelgruppe");
-  if (parents.has(data.primaryMuscleId)) throw new UserError("Bitte eine konkrete Muskelgruppe als primären Muskel wählen");
+  for (const id of muscleIds) if (!known.has(id)) throw new UserError(msg("exercises.unknownMuscle"));
+  if (parents.has(data.primaryMuscleId)) throw new UserError(msg("exercises.primaryMustBeSpecific"));
   const [eq1] = await db.select({ id: s.equipment.id }).from(s.equipment).where(eq(s.equipment.id, data.equipmentId)).limit(1);
-  if (!eq1) throw new UserError("Unbekanntes Equipment");
+  if (!eq1) throw new UserError(msg("exercises.unknownEquipment"));
   if (data.movementPatternId) {
     const [p] = await db.select({ id: s.movementPatterns.id }).from(s.movementPatterns).where(eq(s.movementPatterns.id, data.movementPatternId)).limit(1);
-    if (!p) throw new UserError("Unbekanntes Bewegungsmuster");
+    if (!p) throw new UserError(msg("exercises.unknownPattern"));
   }
 }
 
@@ -80,7 +81,7 @@ export async function updateExerciseAction(id: string, input: ExerciseInput) {
     await validateRefs(data);
     await db.transaction(async (tx) => {
       const [row] = await tx.select({ isCustom: s.exercises.isCustom }).from(s.exercises).where(eq(s.exercises.id, eid)).limit(1);
-      if (!row) throw new UserError("Übung nicht gefunden");
+      if (!row) throw new UserError(msg("exercises.notFound"));
       // Edited built-ins are marked so app updates never overwrite the user's changes.
       await tx
         .update(s.exercises)
@@ -100,7 +101,7 @@ export async function resetBuiltinExerciseAction(id: string) {
   return run(async () => {
     const eid = exerciseId.parse(id);
     const def = BUILTIN_EXERCISES.find((e) => e.id === eid);
-    if (!def) throw new UserError("Keine Standardübung");
+    if (!def) throw new UserError(msg("exercises.notBuiltin"));
     await db.transaction(async (tx) => {
       await tx
         .update(s.exercises)
@@ -161,7 +162,7 @@ export async function deleteExerciseAction(id: string) {
   return run<{ archived: boolean }>(async () => {
     const eid = exerciseId.parse(id);
     const [row] = await db.select({ isCustom: s.exercises.isCustom }).from(s.exercises).where(eq(s.exercises.id, eid)).limit(1);
-    if (!row) throw new UserError("Übung nicht gefunden");
+    if (!row) throw new UserError(msg("exercises.notFound"));
     const usage = await getExerciseUsage(eid);
     if (!row.isCustom || usage.templates > 0 || usage.workouts > 0) {
       await db.update(s.exercises).set({ archivedAt: new Date() }).where(eq(s.exercises.id, eid));

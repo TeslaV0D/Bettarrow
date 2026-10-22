@@ -5,6 +5,8 @@ import { Bell, Pause, Play, RotateCcw, Timer, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatClock } from "@/lib/format";
 import { playBeep, restTimer } from "./rest-timer-store";
+import { fmt } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 
 const QUICK = [60, 90, 120, 180];
 const noopSubscribe = () => () => {};
@@ -13,6 +15,7 @@ const noopSubscribe = () => () => {};
 export function RestTimerBar({ sound, defaultSeconds }: { sound: boolean; defaultSeconds: number }) {
   const s = useSyncExternalStore(restTimer.subscribe, restTimer.getSnapshot, restTimer.getServerSnapshot);
   const [showQuick, setShowQuick] = useState(false);
+  const t = useT();
   const [permVersion, setPermVersion] = useState(0);
   const perm = useSyncExternalStore(
     noopSubscribe,
@@ -31,20 +34,20 @@ export function RestTimerBar({ sound, defaultSeconds }: { sound: boolean; defaul
       }
       if (typeof Notification !== "undefined" && Notification.permission === "granted" && document.visibilityState === "hidden") {
         try {
-          new Notification("Pause vorbei", { body: st.label ? `Weiter mit ${st.label}` : "Nächster Satz!", tag: "bettarrow-rest" });
+          new Notification(t.rest.over, { body: st.label ? fmt(t.rest.continueWith, { name: st.label }) : t.rest.nextSet, tag: "bettarrow-rest" });
         } catch {
           /* some mobile browsers only allow notifications via service worker */
         }
       }
     });
     return () => restTimer.onFinish(null);
-  }, [sound]);
+  }, [sound, t]);
 
   // Auto-hide the "done" state after a while.
   useEffect(() => {
     if (!s.finishedAt) return;
-    const t = setTimeout(() => restTimer.stop(), 8000);
-    return () => clearTimeout(t);
+    const timeout = setTimeout(() => restTimer.stop(), 8000);
+    return () => clearTimeout(timeout);
   }, [s.finishedAt]);
 
   const running = s.endsAt != null;
@@ -79,11 +82,11 @@ export function RestTimerBar({ sound, defaultSeconds }: { sound: boolean; defaul
             onClick={() => setShowQuick((v) => !v)}
             onDoubleClick={() => restTimer.start(defaultSeconds)}
             className="flex h-12 items-center gap-2 rounded-full border border-border bg-surface-2/95 px-4 text-sm font-medium text-muted shadow-lg backdrop-blur hover:text-text"
-            aria-label="Pausentimer starten"
+            aria-label={t.rest.start}
             aria-expanded={showQuick}
           >
             <Timer className="size-4" aria-hidden />
-            Pause
+            {t.rest.label}
           </button>
         </div>
       </div>
@@ -99,28 +102,28 @@ export function RestTimerBar({ sound, defaultSeconds }: { sound: boolean; defaul
         <div className="flex items-center gap-2 px-3 py-2">
           <div className="min-w-0 flex-1">
             <p className="truncate text-xs text-muted">
-              {done ? "Pause vorbei" : paused ? "Pausiert" : "Pause"}
+              {done ? t.rest.over : paused ? t.rest.paused : t.rest.label}
               {s.label ? <span className="hidden sm:inline"> · {s.label}</span> : null}
             </p>
-            <p className={cn("tabular text-2xl font-semibold leading-tight", done && "text-accent")} aria-label={`Verbleibend ${formatClock(remaining / 1000)}`}>
+            <p className={cn("tabular text-2xl font-semibold leading-tight", done && "text-accent")} aria-label={fmt(t.rest.remaining, { time: formatClock(remaining / 1000) })}>
               {done ? "0:00" : formatClock(remaining / 1000)}
             </p>
           </div>
           {!done ? (
             <>
-              <TimerButton label="15 Sekunden weniger" onClick={() => restTimer.add(-15)}>−15</TimerButton>
-              <TimerButton label="15 Sekunden mehr" onClick={() => restTimer.add(15)}>+15</TimerButton>
-              <TimerButton label={paused ? "Fortsetzen" : "Pausieren"} onClick={() => (paused ? restTimer.resume() : restTimer.pause())}>
+              <TimerButton label={t.rest.minus15} onClick={() => restTimer.add(-15)}>−15</TimerButton>
+              <TimerButton label={t.rest.plus15} onClick={() => restTimer.add(15)}>+15</TimerButton>
+              <TimerButton label={paused ? t.rest.resume : t.rest.pause} onClick={() => (paused ? restTimer.resume() : restTimer.pause())}>
                 {paused ? <Play className="size-4" /> : <Pause className="size-4" />}
               </TimerButton>
             </>
           ) : null}
-          <TimerButton label="Zurücksetzen" onClick={() => restTimer.reset()}>
+          <TimerButton label={t.rest.reset} onClick={() => restTimer.reset()}>
             <RotateCcw className="size-4" />
           </TimerButton>
           {perm === "default" ? (
             <TimerButton
-              label="Benachrichtigungen aktivieren"
+              label={t.rest.enableNotifications}
               onClick={async () => {
                 await Notification.requestPermission();
                 setPermVersion((v) => v + 1);
@@ -129,7 +132,7 @@ export function RestTimerBar({ sound, defaultSeconds }: { sound: boolean; defaul
               <Bell className="size-4" />
             </TimerButton>
           ) : null}
-          <TimerButton label="Timer schließen" onClick={() => restTimer.stop()}>
+          <TimerButton label={t.rest.close} onClick={() => restTimer.stop()}>
             <X className="size-4" />
           </TimerButton>
         </div>

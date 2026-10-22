@@ -1,4 +1,5 @@
 import { ymdToDate, type YMD } from "./dates";
+import { activeIntlLocale, activeLocale, type Locale } from "./i18n/locales";
 
 export type WeightUnit = "kg" | "lb";
 export type HeightUnit = "cm" | "in";
@@ -17,10 +18,11 @@ export function unitToKg(value: number, unit: WeightUnit): number {
 
 const numberFormats = new Map<string, Intl.NumberFormat>();
 function nf(maxDigits: number, minDigits = 0) {
-  const key = `${minDigits}:${maxDigits}`;
+  const locale = activeIntlLocale();
+  const key = `${locale}:${minDigits}:${maxDigits}`;
   let f = numberFormats.get(key);
   if (!f) {
-    f = new Intl.NumberFormat("de-DE", { maximumFractionDigits: maxDigits, minimumFractionDigits: minDigits });
+    f = new Intl.NumberFormat(locale, { maximumFractionDigits: maxDigits, minimumFractionDigits: minDigits });
     numberFormats.set(key, f);
   }
   return f;
@@ -41,11 +43,19 @@ export function formatWeight(kg: number | null | undefined, unit: WeightUnit = "
   return `${formatWeightValue(kg, unit)} ${unit}`;
 }
 
+/** Short unit words per language (hours, minutes, metric tonnes). */
+const UNIT_WORDS: Record<Locale, { h: string; min: string; t: string }> = {
+  de: { h: "h", min: "min", t: "t" },
+  en: { h: "h", min: "min", t: "t" },
+  ru: { h: "ч", min: "мин", t: "т" },
+  uk: { h: "год", min: "хв", t: "т" },
+};
+
 /** Large volumes are shown compact: 12.345 kg → "12,3 t". */
 export function formatVolume(kg: number | null | undefined, unit: WeightUnit = "kg"): string {
   if (kg == null) return "–";
   const v = kgToUnit(kg, unit);
-  if (unit === "kg" && v >= 10_000) return `${formatNumber(v / 1000, 1)} t`;
+  if (unit === "kg" && v >= 10_000) return `${formatNumber(v / 1000, 1)} ${UNIT_WORDS[activeLocale()].t}`;
   return `${formatNumber(v, 0)} ${unit}`;
 }
 
@@ -59,8 +69,9 @@ export function formatDuration(totalSeconds: number, withSeconds = false): strin
     const ss = String(sec).padStart(2, "0");
     return h > 0 ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
   }
-  if (h > 0) return `${h} h ${m} min`;
-  return `${m} min`;
+  const w = UNIT_WORDS[activeLocale()];
+  if (h > 0) return `${h} ${w.h} ${m} ${w.min}`;
+  return `${m} ${w.min}`;
 }
 
 export function formatClock(seconds: number): string {
@@ -69,10 +80,12 @@ export function formatClock(seconds: number): string {
 }
 
 const dateFormats = new Map<string, Intl.DateTimeFormat>();
-function df(key: string, opts: Intl.DateTimeFormatOptions) {
+function df(style: string, opts: Intl.DateTimeFormatOptions) {
+  const locale = activeIntlLocale();
+  const key = `${locale}:${style}`;
   let f = dateFormats.get(key);
   if (!f) {
-    f = new Intl.DateTimeFormat("de-DE", { timeZone: "UTC", ...opts });
+    f = new Intl.DateTimeFormat(locale, { timeZone: "UTC", ...opts });
     dateFormats.set(key, f);
   }
   return f;
@@ -85,11 +98,13 @@ export function formatDay(ymd: YMD, style: "short" | "medium" | "long" | "weekda
     case "short":
       return df("short", { day: "2-digit", month: "2-digit", year: "2-digit" }).format(d);
     case "long":
-      return df("long", { weekday: "long", day: "numeric", month: "long", year: "numeric" }).format(d);
+      // Composed instead of one weekday+date pattern: ICU versions disagree on that pattern (en-GB comma),
+      // which would make server- and browser-rendered text differ.
+      return capitalize(`${df("weekdayLong", { weekday: "long" }).format(d)}, ${df("long", { day: "numeric", month: "long", year: "numeric" }).format(d)}`);
     case "weekday":
-      return df("weekday", { weekday: "short" }).format(d).replace(".", "");
+      return capitalize(df("weekday", { weekday: "short" }).format(d).replace(".", ""));
     case "month":
-      return df("month", { month: "long", year: "numeric" }).format(d);
+      return capitalize(df("month", { month: "long", year: "numeric" }).format(d).replace(/\s*[гр]\.$/, ""));
     case "dayMonth":
       return df("dayMonth", { day: "numeric", month: "short" }).format(d);
     case "medium":
@@ -100,18 +115,27 @@ export function formatDay(ymd: YMD, style: "short" | "medium" | "long" | "weekda
 
 /** Formats an instant as time of day in the given time zone. */
 export function formatTime(instant: Date, timeZone: string): string {
-  return new Intl.DateTimeFormat("de-DE", { timeZone, hour: "2-digit", minute: "2-digit" }).format(instant);
+  return new Intl.DateTimeFormat(activeIntlLocale(), { timeZone, hour: "2-digit", minute: "2-digit" }).format(instant);
 }
 
+/** "Heute", "Gestern", "vor 3 Tagen" … in the active language; older days as a date. */
 export function relativeDay(ymd: YMD, today: YMD): string {
   const diff = Math.round((ymdToDate(today).getTime() - ymdToDate(ymd).getTime()) / 86_400_000);
-  if (diff === 0) return "Heute";
-  if (diff === 1) return "Gestern";
-  if (diff === -1) return "Morgen";
-  if (diff > 1 && diff < 7) return `vor ${diff} Tagen`;
+  if (diff >= -1 && diff < 7) {
+    return capitalize(new Intl.RelativeTimeFormat(activeIntlLocale(), { numeric: "auto" }).format(-diff, "day"));
+  }
   return formatDay(ymd, "medium");
 }
 
-export function pluralize(n: number, one: string, many: string): string {
-  return `${formatNumber(n, 1)} ${n === 1 ? one : many}`;
+/** Short weekday names (index 0 = Monday … 6 = Sunday) in the active language. */
+export function weekdayNames(style: "short" | "narrow" | "long" = "short"): string[] {
+  // 2024-01-01 was a Monday.
+  return Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(Date.UTC(2024, 0, 1 + i));
+    return capitalize(new Intl.DateTimeFormat(activeIntlLocale(), { timeZone: "UTC", weekday: style }).format(d).replace(".", ""));
+  });
+}
+
+function capitalize(s: string): string {
+  return s.charAt(0).toLocaleUpperCase(activeIntlLocale()) + s.slice(1);
 }

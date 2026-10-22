@@ -16,48 +16,52 @@ import { SettingsForm } from "@/components/profile/settings-form";
 import { DataSection } from "@/components/profile/data-section";
 import { CategoriesSection } from "@/components/profile/categories-section";
 import pkg from "../../../../package.json";
+import { getT } from "@/server/i18n";
+import { refName } from "@/lib/i18n/reference";
 
-export const metadata: Metadata = { title: "Profil" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT()).profile.title };
+}
 
 const TABS = [
-  { id: "profil", label: "Profil" },
-  { id: "gewicht", label: "Körpergewicht" },
-  { id: "einstellungen", label: "Einstellungen" },
-  { id: "daten", label: "Daten" },
+  { id: "profil", key: "tabProfile" },
+  { id: "gewicht", key: "tabWeight" },
+  { id: "einstellungen", key: "tabSettings" },
+  { id: "daten", key: "tabData" },
 ] as const;
 type Tab = (typeof TABS)[number]["id"];
 
 export default async function ProfilePage({ searchParams }: { searchParams: Promise<{ tab?: string }> }) {
   const { tab: raw } = await searchParams;
-  const tab: Tab = TABS.some((t) => t.id === raw) ? (raw as Tab) : "profil";
-  const [profile, settings] = await Promise.all([getProfile(), getSettings()]);
+  const tab: Tab = TABS.some((x) => x.id === raw) ? (raw as Tab) : "profil";
+  const [t, profile, settings] = await Promise.all([getT(), getProfile(), getSettings()]);
   const unit = settings.weightUnit as WeightUnit;
 
   return (
     <div className="mx-auto max-w-5xl">
       <header className="mb-5 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">{profile.name || "Profil"}</h1>
-          <p className="mt-1 text-sm text-muted">Persönliche Angaben, Körpergewicht, Einstellungen und Daten</p>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">{profile.name || t.profile.title}</h1>
+          <p className="mt-1 text-sm text-muted">{t.profile.subtitle}</p>
         </div>
         <form action={logoutAction} className="lg:hidden">
           <button type="submit" className="inline-flex h-10 items-center gap-2 rounded-md px-3 text-sm text-muted hover:bg-surface-2 hover:text-text">
-            <LogOut className="size-4" /> Abmelden
+            <LogOut className="size-4" /> {t.shell.logout}
           </button>
         </form>
       </header>
-      <nav className="no-scrollbar -mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-border px-4 sm:mx-0 sm:px-0" aria-label="Profilbereiche">
-        {TABS.map((t) => (
+      <nav className="no-scrollbar -mx-4 mb-5 flex gap-1 overflow-x-auto border-b border-border px-4 sm:mx-0 sm:px-0" aria-label={t.profile.areas}>
+        {TABS.map((x) => (
           <Link
-            key={t.id}
-            href={`/profile?tab=${t.id}`}
-            aria-current={tab === t.id ? "page" : undefined}
+            key={x.id}
+            href={`/profile?tab=${x.id}`}
+            aria-current={tab === x.id ? "page" : undefined}
             className={cn(
               "-mb-px shrink-0 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors",
-              tab === t.id ? "border-accent text-text" : "border-transparent text-muted hover:text-text",
+              tab === x.id ? "border-accent text-text" : "border-transparent text-muted hover:text-text",
             )}
           >
-            {t.label}
+            {t.profile[x.key]}
           </Link>
         ))}
       </nav>
@@ -83,7 +87,7 @@ export default async function ProfilePage({ searchParams }: { searchParams: Prom
         />
       ) : null}
       {tab === "daten" ? <DataTab /> : null}
-      <p className="mt-10 text-center text-xs text-subtle">Bettarrow {pkg.version} · selbst gehostet · keine externen Dienste</p>
+      <p className="mt-10 text-center text-xs text-subtle">Bettarrow {pkg.version} · {t.profile.footer}</p>
     </div>
   );
 }
@@ -102,7 +106,8 @@ async function WeightTab({ unit, targetKg, timezone, weekStart }: { unit: Weight
 }
 
 async function DataTab() {
-  const [backups, equipment, patterns, muscles] = await Promise.all([
+  const [t, backups, equipment, patterns, muscles] = await Promise.all([
+    getT(),
     getBackups(),
     db.select().from(s.equipment).orderBy(asc(s.equipment.sortOrder)),
     db.select().from(s.movementPatterns).orderBy(asc(s.movementPatterns.sortOrder)),
@@ -111,7 +116,12 @@ async function DataTab() {
   return (
     <div className="space-y-4">
       <DataSection backups={{ ...backups, files: backups.files.map((f) => ({ ...f, createdAt: f.createdAt.toISOString() })) }} />
-      <CategoriesSection equipment={equipment} patterns={patterns} muscles={muscles} />
+      {/* Built-in names are translated; the stored equipment category stays the value new entries are filed under. */}
+      <CategoriesSection
+        equipment={equipment.map((e) => ({ ...e, name: refName(t.equipment, e.id, e.name) }))}
+        patterns={patterns.map((p) => ({ ...p, name: refName(t.patterns, p.id, p.name) }))}
+        muscles={muscles.map((m) => ({ ...m, name: refName(t.muscles, m.id, m.name) }))}
+      />
     </div>
   );
 }

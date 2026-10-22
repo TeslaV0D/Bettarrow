@@ -4,6 +4,7 @@ import * as RD from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/cn";
+import { useT } from "@/components/i18n-provider";
 
 export const Dialog = RD.Root;
 export const DialogTrigger = RD.Trigger;
@@ -31,6 +32,7 @@ export function DialogContent({
   hideTitle?: boolean;
   onOpenAutoFocus?: (e: Event) => void;
 }) {
+  const t = useT();
   const width = { sm: "sm:max-w-sm", md: "sm:max-w-md", lg: "sm:max-w-lg", xl: "sm:max-w-2xl" }[size];
   return (
     <RD.Portal>
@@ -51,7 +53,7 @@ export function DialogContent({
             <RD.Title className="text-base font-semibold tracking-tight">{title}</RD.Title>
             {description ? <RD.Description className="mt-1 text-sm text-muted">{description}</RD.Description> : null}
           </div>
-          <RD.Close className="-mr-2 -mt-1 grid size-9 shrink-0 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-text" aria-label="Schließen">
+          <RD.Close className="-mr-2 -mt-1 grid size-9 shrink-0 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-text" aria-label={t.common.close}>
             <X className="size-4" />
           </RD.Close>
         </div>

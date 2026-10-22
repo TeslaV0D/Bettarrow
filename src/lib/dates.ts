@@ -145,16 +145,7 @@ export type PeriodKey =
   | "all"
   | "custom";
 
-export const PERIOD_LABELS: Record<PeriodKey, string> = {
-  this_week: "Diese Woche",
-  last_week: "Letzte Woche",
-  this_month: "Dieser Monat",
-  last_month: "Letzter Monat",
-  last_90: "Letzte 90 Tage",
-  this_year: "Dieses Jahr",
-  all: "Gesamt",
-  custom: "Benutzerdefiniert",
-};
+export const PERIOD_KEYS: PeriodKey[] = ["this_week", "last_week", "this_month", "last_month", "last_90", "this_year", "all", "custom"];
 
 /** Inclusive date range for a period. `null` bounds mean "unbounded". */
 export function periodRange(

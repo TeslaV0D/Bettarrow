@@ -8,6 +8,7 @@ import { cn } from "@/lib/cn";
 import { Logo } from "@/components/logo";
 import { Elapsed } from "@/components/elapsed";
 import { Button } from "@/components/ui/button";
+import { useT } from "@/components/i18n-provider";
 import { logoutAction } from "@/server/actions/auth";
 import { LIBRARY_NAV, MAIN_NAV, isActive } from "./nav-items";
 import { StartWorkoutDialog } from "./start-workout-dialog";
@@ -22,6 +23,7 @@ export interface ActiveWorkoutInfo {
 
 export function AppShell({ active, children }: { active: ActiveWorkoutInfo | null; children: ReactNode }) {
   const pathname = usePathname();
+  const t = useT();
   const [startOpen, setStartOpen] = useState(false);
   const onWorkout = pathname === "/workout";
 
@@ -53,17 +55,17 @@ export function AppShell({ active, children }: { active: ActiveWorkoutInfo | nul
           ) : (
             <Button variant="primary" className="w-full" onClick={() => setStartOpen(true)}>
               <Play className="size-4 fill-current" aria-hidden />
-              Training starten
+              {t.shell.startWorkout}
             </Button>
           )}
         </div>
-        <nav aria-label="Hauptnavigation" className="space-y-0.5">
+        <nav aria-label={t.shell.mainNav} className="space-y-0.5">
           {MAIN_NAV.map((item) => (
             <SideLink key={item.href} item={item} active={isActive(pathname, item.href)} />
           ))}
         </nav>
-        <p className="mb-1 mt-6 px-3 text-xs font-medium uppercase tracking-wider text-subtle">Bibliothek</p>
-        <nav aria-label="Bibliothek" className="space-y-0.5">
+        <p className="mb-1 mt-6 px-3 text-xs font-medium uppercase tracking-wider text-subtle">{t.shell.library}</p>
+        <nav aria-label={t.shell.library} className="space-y-0.5">
           {LIBRARY_NAV.map((item) => (
             <SideLink key={item.href} item={item} active={isActive(pathname, item.href)} />
           ))}
@@ -71,7 +73,7 @@ export function AppShell({ active, children }: { active: ActiveWorkoutInfo | nul
         <form action={logoutAction} className="mt-auto">
           <button type="submit" className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted hover:bg-surface-2 hover:text-text">
             <LogOut className="size-4" aria-hidden />
-            Abmelden
+            {t.shell.logout}
           </button>
         </form>
       </aside>
@@ -101,14 +103,14 @@ export function AppShell({ active, children }: { active: ActiveWorkoutInfo | nul
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-semibold">{active.name}</span>
                 <span className="text-xs text-muted">
-                  Training läuft · <Elapsed className="tabular text-accent" {...active} />
+                  {t.shell.workoutRunning} · <Elapsed className="tabular text-accent" {...active} />
                 </span>
               </span>
-              <span className="text-sm font-medium text-accent">Fortsetzen</span>
+              <span className="text-sm font-medium text-accent">{t.shell.resume}</span>
             </Link>
           ) : null}
           <nav
-            aria-label="Hauptnavigation"
+            aria-label={t.shell.mainNav}
             className="safe-bottom grid grid-cols-5 border-t border-border bg-bg/95 backdrop-blur supports-[backdrop-filter]:bg-bg/85"
           >
             {MAIN_NAV.slice(0, 2).map((item) => (
@@ -118,7 +120,7 @@ export function AppShell({ active, children }: { active: ActiveWorkoutInfo | nul
               {active ? (
                 <Link
                   href="/workout"
-                  aria-label="Laufendes Training öffnen"
+                  aria-label={t.shell.openRunningWorkout}
                   className="grid size-12 place-items-center rounded-full bg-accent text-accent-ink shadow-lg shadow-accent/10"
                 >
                   <Play className="size-5 fill-current" aria-hidden />
@@ -127,7 +129,7 @@ export function AppShell({ active, children }: { active: ActiveWorkoutInfo | nul
                 <button
                   type="button"
                   onClick={() => setStartOpen(true)}
-                  aria-label="Training starten"
+                  aria-label={t.shell.startWorkout}
                   className="grid size-12 place-items-center rounded-full bg-accent text-accent-ink shadow-lg shadow-accent/10 active:scale-95"
                 >
                   <Play className="size-5 fill-current" aria-hidden />
@@ -147,6 +149,7 @@ export function AppShell({ active, children }: { active: ActiveWorkoutInfo | nul
 }
 
 function SideLink({ item, active }: { item: (typeof MAIN_NAV)[number]; active: boolean }) {
+  const t = useT();
   const Icon = item.icon;
   return (
     <Link
@@ -158,12 +161,13 @@ function SideLink({ item, active }: { item: (typeof MAIN_NAV)[number]; active: b
       )}
     >
       <Icon className={cn("size-[18px]", active && "text-accent")} aria-hidden />
-      {item.label}
+      {t.nav[item.key]}
     </Link>
   );
 }
 
 function BottomLink({ item, active }: { item: (typeof MAIN_NAV)[number]; active: boolean }) {
+  const t = useT();
   const Icon = item.icon;
   return (
     <Link
@@ -172,7 +176,7 @@ function BottomLink({ item, active }: { item: (typeof MAIN_NAV)[number]; active:
       className={cn("flex h-16 flex-col items-center justify-center gap-1 text-[11px] font-medium", active ? "text-text" : "text-subtle")}
     >
       <Icon className={cn("size-[22px]", active && "text-accent")} aria-hidden />
-      {item.label}
+      {t.nav[item.key]}
     </Link>
   );
 }
