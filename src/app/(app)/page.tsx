@@ -10,22 +10,23 @@ import { cn } from "@/lib/cn";
 import { dayState } from "@/lib/calendar";
 import { eachDay, hourIn, todayIn } from "@/lib/dates";
 import { formatDay, formatDuration, formatVolume, formatWeight, relativeDay, type WeightUnit } from "@/lib/format";
-import { PR_LABELS } from "@/lib/training";
+import { fmt, plural } from "@/lib/i18n";
+import { getT } from "@/server/i18n";
 
 export default async function DashboardPage() {
-  const settings = await getSettings();
+  const [settings, t] = await Promise.all([getSettings(), getT()]);
   const today = todayIn(settings.timezone);
   const [data, profile, catalog, reference] = await Promise.all([getDashboardData(today), getProfile(), getCatalog(), getReferenceData()]);
   const unit = settings.weightUnit as WeightUnit;
   const exName = new Map(catalog.map((e) => [e.id, e.name]));
   const labels = Object.fromEntries(reference.muscles.map((m) => [m.id, m.name]));
   const hour = hourIn(settings.timezone);
-  const greeting = hour < 5 ? "Gute Nacht" : hour < 11 ? "Guten Morgen" : hour < 18 ? "Hallo" : "Guten Abend";
+  const greeting = hour < 5 ? t.dashboard.greetingNight : hour < 11 ? t.dashboard.greetingMorning : hour < 18 ? t.dashboard.greetingDay : t.dashboard.greetingEvening;
 
   const todayEntries = data.calendar.entries.filter((e) => e.date === today);
   const todayWorkouts = data.calendar.workouts.filter((w) => w.localDate === today);
   const weekDays = eachDay(data.weekFrom, data.weekTo);
-  const t = data.week.totals;
+  const totals = data.week.totals;
   const prGroups = [...new Map(data.prs.map((p) => [`${p.workoutId}:${p.exerciseId}`, data.prs.filter((x) => x.workoutId === p.workoutId && x.exerciseId === p.exerciseId)])).values()];
 
   return (
@@ -52,17 +53,17 @@ export default async function DashboardPage() {
 
           <Card className="p-4 sm:p-5">
             <div className="flex items-center justify-between">
-              <h2 className="text-[15px] font-semibold">Diese Woche</h2>
+              <h2 className="text-[15px] font-semibold">{t.dashboard.thisWeek}</h2>
               <Link href="/calendar?view=week" className="text-sm text-muted hover:text-text">
-                Kalender
+                {t.nav.calendar}
               </Link>
             </div>
-            <ol className="mt-3 grid grid-cols-7 gap-1.5" aria-label="Wochenübersicht">
+            <ol className="mt-3 grid grid-cols-7 gap-1.5" aria-label={t.dashboard.weekOverview}>
               {weekDays.map((d) => {
                 const entries = data.calendar.entries.filter((e) => e.date === d);
                 const done = data.calendar.workouts.filter((w) => w.localDate === d && w.status === "completed").length;
                 const st = dayState(d, today, entries, done);
-                const label = { trained: "trainiert", planned: "geplant", missed: "verpasst", rest: "Ruhetag", empty: "frei" }[st];
+                const label = { trained: t.dashboard.dayTrained, planned: t.dashboard.dayPlanned, missed: t.dashboard.dayMissed, rest: t.dashboard.dayRest, empty: t.dashboard.dayEmpty }[st];
                 return (
                   <li key={d} className="flex flex-col items-center gap-1.5" aria-label={`${formatDay(d, "weekday")}: ${label}`}>
                     <span className={cn("text-xs", d === today ? "font-semibold text-text" : "text-subtle")}>{formatDay(d, "weekday")}</span>
@@ -84,18 +85,18 @@ export default async function DashboardPage() {
               })}
             </ol>
             <dl className="mt-4 grid grid-cols-3 divide-x divide-border rounded-md border border-border">
-              <Stat label="Trainings" value={String(t.sessions)} previous={String(data.lastWeek.sessions)} />
-              <Stat label="Arbeitssätze" value={String(t.workingSets)} previous={String(data.lastWeek.workingSets)} />
-              <Stat label="Volumen" value={formatVolume(t.volumeKg, unit)} previous={formatVolume(data.lastWeek.volumeKg, unit)} />
+              <Stat label={t.dashboard.sessions} value={String(totals.sessions)} previous={fmt(t.common.previousWeek, { value: data.lastWeek.sessions })} />
+              <Stat label={t.dashboard.workingSets} value={String(totals.workingSets)} previous={fmt(t.common.previousWeek, { value: data.lastWeek.workingSets })} />
+              <Stat label={t.dashboard.volume} value={formatVolume(totals.volumeKg, unit)} previous={fmt(t.common.previousWeek, { value: formatVolume(data.lastWeek.volumeKg, unit) })} />
             </dl>
           </Card>
 
           <Card>
             <CardHeader
-              title="Letzte Trainings"
+              title={t.dashboard.recentWorkouts}
               action={
                 <Link href="/history" className="text-sm text-muted hover:text-text">
-                  Alle
+                  {t.common.all}
                 </Link>
               }
             />
@@ -107,7 +108,7 @@ export default async function DashboardPage() {
                       <div className="min-w-0 flex-1">
                         <p className="truncate font-medium">{w.name}</p>
                         <p className="tabular truncate text-sm text-muted">
-                          {relativeDay(w.localDate, today)} · {formatDuration(w.durationSeconds)} · {w.workingSets} Sätze · {formatVolume(w.volumeKg, unit)}
+                          {relativeDay(w.localDate, today)} · {formatDuration(w.durationSeconds)} · {plural(t.units.sets, w.workingSets)} · {formatVolume(w.volumeKg, unit)}
                         </p>
                       </div>
                       <ChevronRight className="size-4 text-subtle" />
@@ -116,20 +117,20 @@ export default async function DashboardPage() {
                 ))}
               </ul>
             ) : (
-              <p className="px-5 pb-5 pt-2 text-sm text-muted">Noch keine abgeschlossenen Trainings.</p>
+              <p className="px-5 pb-5 pt-2 text-sm text-muted">{t.dashboard.noWorkouts}</p>
             )}
           </Card>
 
-          <nav className="grid grid-cols-3 gap-2 lg:hidden" aria-label="Bibliothek">
-            <QuickLink href="/templates" icon={<ClipboardList className="size-5" />} label="Vorlagen" />
-            <QuickLink href="/exercises" icon={<Dumbbell className="size-5" />} label="Übungen" />
-            <QuickLink href="/history" icon={<History className="size-5" />} label="Verlauf" />
+          <nav className="grid grid-cols-3 gap-2 lg:hidden" aria-label={t.shell.library}>
+            <QuickLink href="/templates" icon={<ClipboardList className="size-5" />} label={t.nav.templates} />
+            <QuickLink href="/exercises" icon={<Dumbbell className="size-5" />} label={t.nav.exercises} />
+            <QuickLink href="/history" icon={<History className="size-5" />} label={t.nav.history} />
           </nav>
         </div>
 
         <div className="min-w-0 space-y-4">
           <Card className="p-4 sm:p-5">
-            <h2 className="mb-3 text-[15px] font-semibold">Muskeln diese Woche</h2>
+            <h2 className="mb-3 text-[15px] font-semibold">{t.dashboard.musclesThisWeek}</h2>
             <MusclePanel
               stats={data.week.muscles.map((m) => ({ muscleId: m.muscleId, directSets: m.directSets, indirectSets: m.indirectSets, weightedSets: m.weightedSets }))}
               exercises={data.weekExercises.map((e) => ({ ...e, name: exName.get(e.exerciseId) ?? e.exerciseId }))}
@@ -149,7 +150,7 @@ export default async function DashboardPage() {
           </Card>
 
           <Card>
-            <CardHeader title="Neue Bestleistungen" description="Letzte 30 Tage" />
+            <CardHeader title={t.dashboard.newPrs} description={t.dashboard.last30Days} />
             {prGroups.length ? (
               <ul className="space-y-2 p-4 pt-3 sm:px-5">
                 {prGroups.map((group) => {
@@ -165,10 +166,10 @@ export default async function DashboardPage() {
                           </span>
                           {group.map((pr) => (
                             <span key={pr.kind} className="block text-xs text-muted">
-                              {PR_LABELS[pr.kind]}:{" "}
+                              {t.prs[pr.kind]}:{" "}
                               <span className="tabular text-text">
                                 {pr.kind === "max_reps" || pr.kind === "max_reps_at_load"
-                                  ? `${pr.reps} Wdh.${pr.loadKg && pr.kind === "max_reps_at_load" ? ` × ${formatWeight(pr.loadKg, unit)}` : ""}`
+                                  ? `${fmt(t.common.repsShort, { n: pr.reps ?? 0 })}${pr.loadKg && pr.kind === "max_reps_at_load" ? ` × ${formatWeight(pr.loadKg, unit)}` : ""}`
                                   : pr.kind === "max_set_volume"
                                     ? formatVolume(pr.value, unit)
                                     : `${pr.kind === "e1rm" ? "≈ " : ""}${formatWeight(pr.value, unit)}`}
@@ -182,7 +183,7 @@ export default async function DashboardPage() {
                 })}
               </ul>
             ) : (
-              <p className="px-5 pb-5 pt-2 text-sm text-muted">Keine neuen Rekorde in den letzten 30 Tagen.</p>
+              <p className="px-5 pb-5 pt-2 text-sm text-muted">{t.dashboard.noPrs}</p>
             )}
           </Card>
         </div>
@@ -196,7 +197,7 @@ function Stat({ label, value, previous }: { label: string; value: string; previo
     <div className="px-3 py-2.5">
       <dt className="text-xs text-muted">{label}</dt>
       <dd className="tabular mt-0.5 text-lg font-semibold tracking-tight">{value}</dd>
-      <dd className="tabular text-xs text-subtle">Vorwoche: {previous}</dd>
+      <dd className="tabular text-xs text-subtle">{previous}</dd>
     </div>
   );
 }

@@ -4,14 +4,17 @@ import { getSettings } from "@/server/queries/settings";
 import { PageHeader } from "@/components/ui/page-header";
 import { ExerciseForm } from "@/components/exercises/exercise-form";
 import type { LoadMode } from "@/lib/training";
+import { getT } from "@/server/i18n";
 
-export const metadata: Metadata = { title: "Neue Übung" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT()).exercises.new };
+}
 
 export default async function NewExercisePage() {
-  const [reference, settings] = await Promise.all([getReferenceData(), getSettings()]);
+  const [t, reference, settings] = await Promise.all([getT(), getReferenceData(), getSettings()]);
   return (
     <div className="mx-auto max-w-3xl">
-      <PageHeader title="Neue Übung" back={{ href: "/exercises", label: "Übungen" }} />
+      <PageHeader title={t.exercises.new} back={{ href: "/exercises", label: t.exercises.title }} />
       <ExerciseForm reference={reference} defaultBodyweightMode={settings.defaultBodyweightMode as LoadMode} />
     </div>
   );

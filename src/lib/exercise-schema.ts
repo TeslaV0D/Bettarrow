@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { LOAD_MODES, TRACKING_TYPES } from "./training";
+import { MSG } from "./i18n/locales";
 
 const optInt = (min: number, max: number) =>
   z
@@ -9,25 +10,25 @@ const optInt = (min: number, max: number) =>
 
 export const exerciseInputSchema = z
   .object({
-    name: z.string().trim().min(2, "Name ist zu kurz").max(100, "Name ist zu lang"),
+    name: z.string().trim().min(2, `${MSG}validation.nameTooShort`).max(100, `${MSG}validation.nameTooLong`),
     aliases: z.array(z.string().trim().min(1).max(80)).max(20).default([]),
     description: z.string().trim().max(2000).nullable().default(null),
     instructions: z.string().trim().max(5000).nullable().default(null),
-    primaryMuscleId: z.string().min(1, "Primäre Muskelgruppe wählen"),
+    primaryMuscleId: z.string().min(1, `${MSG}validation.choosePrimary`),
     secondaryMuscleIds: z.array(z.string().min(1)).max(10).default([]),
-    equipmentId: z.string().min(1, "Equipment wählen"),
+    equipmentId: z.string().min(1, `${MSG}validation.chooseEquipment`),
     movementPatternId: z.string().min(1).nullable().default(null),
     mechanic: z.enum(["compound", "isolation"]),
     tracking: z.enum(TRACKING_TYPES),
     loadMode: z.enum(LOAD_MODES),
-    bodyweightFactor: z.preprocess((v) => (v === "" || v == null ? 1 : Number(v)), z.number().min(0.05, "Faktor zu klein").max(2, "Faktor max. 2")),
+    bodyweightFactor: z.preprocess((v) => (v === "" || v == null ? 1 : Number(v)), z.number().min(0.05, `${MSG}validation.factorTooSmall`).max(2, `${MSG}validation.factorMax`)),
     repMin: optInt(1, 100),
     repMax: optInt(1, 100),
     restSeconds: optInt(0, 3600),
     notes: z.string().trim().max(5000).nullable().default(null),
   })
   .refine((v) => v.repMin == null || v.repMax == null || v.repMin <= v.repMax, {
-    message: "Minimum darf nicht größer als Maximum sein",
+    message: `${MSG}validation.minGreaterMax`,
     path: ["repMax"],
   });
 

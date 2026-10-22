@@ -12,19 +12,21 @@ import { Badge } from "@/components/ui/badge";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ExerciseActions, ExerciseNotes } from "@/components/exercises/exercise-actions";
 import { ProgressChart } from "@/components/exercises/progress-chart";
-import { formatClock, formatDay, formatVolume, formatWeight, type WeightUnit } from "@/lib/format";
-import { LOAD_MODE_LABELS, isBodyweightMode, supportsE1RM, type LoadMode, type Tracking } from "@/lib/training";
+import { formatClock, formatDay, formatNumber, formatVolume, formatWeight, type WeightUnit } from "@/lib/format";
+import { isBodyweightMode, supportsE1RM, type LoadMode, type Tracking } from "@/lib/training";
+import { fmt, plural } from "@/lib/i18n";
+import { getT } from "@/server/i18n";
 
 export async function generateMetadata({ params }: { params: Promise<{ id: string }> }): Promise<Metadata> {
   const { id } = await params;
-  const ex = await getExercise(decodeURIComponent(id));
-  return { title: ex?.name ?? "Übung" };
+  const [t, ex] = await Promise.all([getT(), getExercise(decodeURIComponent(id))]);
+  return { title: ex?.name ?? t.common.exercise };
 }
 
 export default async function ExercisePage({ params }: { params: Promise<{ id: string }> }) {
   const { id: raw } = await params;
   const id = decodeURIComponent(raw);
-  const [ex, reference, settings] = await Promise.all([getExercise(id), getReferenceData(), getSettings()]);
+  const [t, ex, reference, settings] = await Promise.all([getT(), getExercise(id), getReferenceData(), getSettings()]);
   if (!ex) notFound();
   const progress = await getExerciseProgress(db, id, { bodyweightInVolume: settings.bodyweightInVolume });
   const unit = settings.weightUnit as WeightUnit;
@@ -42,18 +44,18 @@ export default async function ExercisePage({ params }: { params: Promise<{ id: s
       <PageHeader
         title={ex.name}
         subtitle={[muscle.get(ex.primaryMuscleId), equipment].filter(Boolean).join(" · ")}
-        back={{ href: "/exercises", label: "Übungen" }}
+        back={{ href: "/exercises", label: t.exercises.title }}
         actions={<ExerciseActions id={ex.id} favorite={ex.isFavorite} archived={!!ex.archivedAt} isCustom={ex.isCustom} isModified={ex.isModified} />}
       />
 
       <div className="mb-5 flex flex-wrap gap-1.5">
-        {ex.archivedAt ? <Badge tone="warning">Archiviert</Badge> : null}
-        {ex.isCustom ? <Badge tone="info">Eigene Übung</Badge> : null}
+        {ex.archivedAt ? <Badge tone="warning">{t.exercises.archived}</Badge> : null}
+        {ex.isCustom ? <Badge tone="info">{t.exercises.customExercise}</Badge> : null}
         <Badge tone="accent">{muscle.get(ex.primaryMuscleId)}</Badge>
         {ex.secondaryMuscleIds.map((m) => (
           <Badge key={m}>{muscle.get(m)}</Badge>
         ))}
-        <Badge tone="outline">{ex.mechanic === "compound" ? "Mehrgelenkig" : "Isolation"}</Badge>
+        <Badge tone="outline">{ex.mechanic === "compound" ? t.filters.compound : t.filters.isolation}</Badge>
         {pattern ? <Badge tone="outline">{pattern}</Badge> : null}
       </div>
 
@@ -62,25 +64,25 @@ export default async function ExercisePage({ params }: { params: Promise<{ id: s
           {sessions.length ? (
             <>
               <dl className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                {hasLoad ? <Record label="Höchstes Gewicht" value={r.maxLoad ? formatWeight(r.maxLoad.value, unit) : "–"} sub={r.maxLoad ? `${r.maxLoad.reps ?? "–"} Wdh. · ${formatDay(r.maxLoad.date, "short")}` : undefined} /> : null}
+                {hasLoad ? <Record label={t.exercises.maxLoad} value={r.maxLoad ? formatWeight(r.maxLoad.value, unit) : "–"} sub={r.maxLoad ? fmt(t.exercises.repsOnDate, { reps: r.maxLoad.reps ?? "–", date: formatDay(r.maxLoad.date, "short") }) : undefined} /> : null}
                 {supportsE1RM(tracking, loadMode) ? (
-                  <Record label="Geschätztes 1RM" value={r.bestE1rm ? `≈ ${formatWeight(r.bestE1rm.value, unit)}` : "–"} sub={r.bestE1rm ? `aus ${formatWeight(r.bestE1rm.loadKg, unit)} × ${r.bestE1rm.reps}` : "Schätzung (Epley)"} />
+                  <Record label={t.exercises.e1rm} value={r.bestE1rm ? `≈ ${formatWeight(r.bestE1rm.value, unit)}` : "–"} sub={r.bestE1rm ? fmt(t.exercises.e1rmFrom, { weight: formatWeight(r.bestE1rm.loadKg, unit), reps: r.bestE1rm.reps }) : t.exercises.e1rmEstimate} />
                 ) : null}
                 {hasLoad && tracking === "reps" ? (
-                  <Record label="Bestes Satzvolumen" value={r.maxSetVolume ? formatVolume(r.maxSetVolume.value, unit) : "–"} sub={r.maxSetVolume ? `${formatWeight(r.maxSetVolume.loadKg, unit)} × ${r.maxSetVolume.reps}` : undefined} />
+                  <Record label={t.exercises.bestSetVolume} value={r.maxSetVolume ? formatVolume(r.maxSetVolume.value, unit) : "–"} sub={r.maxSetVolume ? `${formatWeight(r.maxSetVolume.loadKg, unit)} × ${r.maxSetVolume.reps}` : undefined} />
                 ) : null}
                 {tracking === "duration" ? (
-                  <Record label="Längste Dauer" value={r.maxDuration ? formatClock(r.maxDuration.value) : "–"} sub={r.maxDuration ? formatDay(r.maxDuration.date, "short") : undefined} />
+                  <Record label={t.exercises.longestDuration} value={r.maxDuration ? formatClock(r.maxDuration.value) : "–"} sub={r.maxDuration ? formatDay(r.maxDuration.date, "short") : undefined} />
                 ) : (
-                  <Record label="Meiste Wdh. (Satz)" value={r.maxReps ? String(r.maxReps.value) : "–"} sub={r.maxReps ? formatDay(r.maxReps.date, "short") : undefined} />
+                  <Record label={t.exercises.mostReps} value={r.maxReps ? String(r.maxReps.value) : "–"} sub={r.maxReps ? formatDay(r.maxReps.date, "short") : undefined} />
                 )}
               </dl>
               <Card className="p-4 sm:p-5">
-                <h2 className="mb-3 text-[15px] font-semibold">Verlauf</h2>
+                <h2 className="mb-3 text-[15px] font-semibold">{t.exercises.history}</h2>
                 <ProgressChart sessions={sessions} unit={unit} hasLoad={hasLoad} hasE1rm={supportsE1RM(tracking, loadMode)} duration={tracking === "duration"} />
               </Card>
               <Card>
-                <CardHeader title="Trainingshistorie" description={`${sessions.length} ${sessions.length === 1 ? "Einheit" : "Einheiten"}`} />
+                <CardHeader title={t.exercises.sessionHistory} description={plural(t.exercises.sessions, sessions.length)} />
                 <ul className="mt-2 divide-y divide-border border-t border-border">
                   {[...sessions].reverse().slice(0, 25).map((s) => (
                     <li key={s.workoutId} className="px-4 py-3 sm:px-5">
@@ -89,7 +91,7 @@ export default async function ExercisePage({ params }: { params: Promise<{ id: s
                           {formatDay(s.date, "medium")}
                         </Link>
                         <span className="tabular text-xs text-muted">
-                          {s.workingSets} Sätze{s.volumeKg ? ` · ${formatVolume(s.volumeKg, unit)}` : ""}
+                          {plural(t.units.sets, s.workingSets)}{s.volumeKg ? ` · ${formatVolume(s.volumeKg, unit)}` : ""}
                         </span>
                       </div>
                       <p className="tabular mt-1 text-sm text-muted">
@@ -113,27 +115,27 @@ export default async function ExercisePage({ params }: { params: Promise<{ id: s
             </>
           ) : (
             <Card>
-              <EmptyState icon={LineIcon} title="Noch keine Trainingsdaten" description="Sobald du diese Übung in einem abgeschlossenen Training protokollierst, erscheinen hier Verlauf und Bestleistungen." />
+              <EmptyState icon={LineIcon} title={t.exercises.noData} description={t.exercises.noDataText} />
             </Card>
           )}
         </div>
 
         <div className="space-y-4">
           <Card>
-            <CardHeader title="Eigene Notizen" />
+            <CardHeader title={t.exerciseForm.ownNotes} />
             <CardBody className="pt-3">
               <ExerciseNotes id={ex.id} notes={ex.notes} />
             </CardBody>
           </Card>
           {r.repsByLoad.length > 1 ? (
             <Card>
-              <CardHeader title="Wiederholungsrekorde" description="Beste Wdh. je Last" />
+              <CardHeader title={t.exercises.repRecords} description={t.exercises.repRecordsHint} />
               <table className="mt-2 w-full text-sm">
                 <tbody className="tabular">
                   {r.repsByLoad.slice(0, 8).map((row) => (
                     <tr key={row.loadKg} className="border-t border-border">
                       <td className="px-4 py-2 sm:px-5">{formatWeight(row.loadKg, unit)}</td>
-                      <td className="px-4 py-2 text-right text-muted sm:px-5">{row.reps} Wdh.</td>
+                      <td className="px-4 py-2 text-right text-muted sm:px-5">{fmt(t.common.repsShort, { n: row.reps })}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -141,7 +143,7 @@ export default async function ExercisePage({ params }: { params: Promise<{ id: s
             </Card>
           ) : null}
           <Card>
-            <CardHeader title="Ausführung" />
+            <CardHeader title={t.exercises.execution} />
             <CardBody className="space-y-3 pt-3 text-sm">
               {ex.description ? <p className="text-muted">{ex.description}</p> : null}
               {ex.instructions ? (
@@ -152,20 +154,20 @@ export default async function ExercisePage({ params }: { params: Promise<{ id: s
                 </ol>
               ) : null}
               <dl className="grid grid-cols-2 gap-x-3 gap-y-2 border-t border-border pt-3 text-xs">
-                <dt className="text-subtle">Wiederholungen</dt>
+                <dt className="text-subtle">{t.exercises.reps}</dt>
                 <dd>{ex.repMin && ex.repMax ? `${ex.repMin}–${ex.repMax}` : "–"}</dd>
-                <dt className="text-subtle">Ruhezeit</dt>
-                <dd>{ex.restSeconds ? formatClock(ex.restSeconds) : `Standard (${formatClock(settings.defaultRestSeconds)})`}</dd>
-                <dt className="text-subtle">Lastberechnung</dt>
+                <dt className="text-subtle">{t.exercises.rest}</dt>
+                <dd>{ex.restSeconds ? formatClock(ex.restSeconds) : fmt(t.exercises.defaultRest, { time: formatClock(settings.defaultRestSeconds) })}</dd>
+                <dt className="text-subtle">{t.exercises.loadCalc}</dt>
                 <dd>
-                  {LOAD_MODE_LABELS[loadMode]}
-                  {isBodyweightMode(loadMode) && ex.bodyweightFactor !== 1 ? ` (Faktor ${String(ex.bodyweightFactor).replace(".", ",")})` : ""}
+                  {t.loadModes[loadMode]}
+                  {isBodyweightMode(loadMode) && ex.bodyweightFactor !== 1 ? fmt(t.exercises.factor, { value: formatNumber(ex.bodyweightFactor, 3) }) : ""}
                 </dd>
-                <dt className="text-subtle">Erfassung</dt>
-                <dd>{tracking === "duration" ? "Zeit" : "Wiederholungen"}</dd>
+                <dt className="text-subtle">{t.exercises.tracking}</dt>
+                <dd>{tracking === "duration" ? t.common.time : t.exercises.reps}</dd>
                 {ex.aliases.length ? (
                   <>
-                    <dt className="text-subtle">Auch bekannt als</dt>
+                    <dt className="text-subtle">{t.exercises.aka}</dt>
                     <dd>{ex.aliases.join(", ")}</dd>
                   </>
                 ) : null}

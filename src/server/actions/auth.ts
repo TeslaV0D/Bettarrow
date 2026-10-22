@@ -10,6 +10,7 @@ import {
   recordFailure,
   verifyPassword,
 } from "@/server/auth";
+import { getT } from "@/server/i18n";
 
 export interface LoginState {
   error?: string;
@@ -23,7 +24,7 @@ function safeNext(value: FormDataEntryValue | null): string {
 export async function loginAction(_prev: LoginState, formData: FormData): Promise<LoginState> {
   const key = await clientKey();
   if (isRateLimited(key) || isRateLimited("*", 30)) {
-    return { error: "Zu viele Fehlversuche. Bitte warte einige Minuten." };
+    return { error: (await getT()).login.rateLimited };
   }
   const password = String(formData.get("password") ?? "");
   const ok = await verifyPassword(password);
@@ -32,7 +33,7 @@ export async function loginAction(_prev: LoginState, formData: FormData): Promis
     recordFailure("*");
     // Small constant delay to slow down guessing.
     await new Promise((r) => setTimeout(r, 400));
-    return { error: "Passwort ist nicht korrekt." };
+    return { error: (await getT()).login.wrongPassword };
   }
   clearFailures(key);
   await createSession();

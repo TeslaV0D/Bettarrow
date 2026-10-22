@@ -20,9 +20,9 @@ import {
   X,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { DISPLAY_STATUS_LABELS, dayState, displayStatus, weekdaysLabel, type CalendarEntry, type DisplayStatus } from "@/lib/calendar";
+import { dayState, displayStatus, weekdaysLabel, type CalendarEntry, type DisplayStatus } from "@/lib/calendar";
 import { addDays, addMonths, isoWeekday, type YMD } from "@/lib/dates";
-import { formatDay } from "@/lib/format";
+import { formatDay, weekdayNames } from "@/lib/format";
 import { Button, buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -40,6 +40,8 @@ import {
   setEntryStatusAction,
   updateEntryAction,
 } from "@/server/actions/calendar";
+import { fmt, plural, type Dict } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 
 export interface CalWorkout {
   id: string;
@@ -58,8 +60,6 @@ export interface CalRule {
   startDate: YMD;
   endDate: YMD | null;
 }
-
-const WEEKDAYS = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
 
 const STATUS_STYLE: Record<DisplayStatus, string> = {
   completed: "bg-accent text-accent-ink",
@@ -85,6 +85,7 @@ export function CalendarView(props: {
 }) {
   const { view, anchor, today, weeks, entries, workouts, templates, rules } = props;
   const router = useRouter();
+  const t = useT();
   const [selected, setSelected] = useState(props.initialSelected);
   const [planOpen, setPlanOpen] = useState(false);
   const [rulesOpen, setRulesOpen] = useState(false);
@@ -108,7 +109,8 @@ export function CalendarView(props: {
   const next = view === "month" ? addMonths(anchor.slice(0, 8) + "01", 1) : addDays(anchor, 7);
   const href = (date: YMD, v = view) => `/calendar?view=${v}&date=${date}`;
   const title = view === "month" ? formatDay(anchor, "month") : `${formatDay(weeks[0][0], "dayMonth")} – ${formatDay(weeks[0][6], "dayMonth")}`;
-  const weekdayHeader = Array.from({ length: 7 }, (_, i) => WEEKDAYS[(props.weekStart - 1 + i) % 7]);
+  const names = weekdayNames();
+  const weekdayHeader = Array.from({ length: 7 }, (_, i) => names[(props.weekStart - 1 + i) % 7]);
   const day = byDay.get(selected) ?? { entries: [], workouts: [] };
 
   return (
@@ -116,33 +118,33 @@ export function CalendarView(props: {
       <div className="mb-4 flex flex-wrap items-center gap-2">
         <h1 className="mr-auto text-2xl font-semibold capitalize tracking-tight sm:text-[28px]">{title}</h1>
         <Segmented
-          aria-label="Ansicht"
+          aria-label={t.muscleMap.view}
           value={view}
           onChange={(v) => router.push(href(anchor, v))}
           options={[
-            { value: "month", label: "Monat" },
-            { value: "week", label: "Woche" },
+            { value: "month", label: t.calendar.month },
+            { value: "week", label: t.calendar.week },
           ]}
         />
       </div>
       <div className="mb-4 flex items-center gap-2">
-        <Link href={href(prev)} className={buttonClasses("secondary", "icon")} aria-label={view === "month" ? "Vorheriger Monat" : "Vorherige Woche"}>
+        <Link href={href(prev)} className={buttonClasses("secondary", "icon")} aria-label={view === "month" ? t.calendar.prevMonth : t.calendar.prevWeek}>
           <ChevronLeft className="size-4" />
         </Link>
         <Link href={`${href(today)}&day=${today}`} className={buttonClasses("secondary", "md")}>
-          Heute
+          {t.common.today}
         </Link>
-        <Link href={href(next)} className={buttonClasses("secondary", "icon")} aria-label={view === "month" ? "Nächster Monat" : "Nächste Woche"}>
+        <Link href={href(next)} className={buttonClasses("secondary", "icon")} aria-label={view === "month" ? t.calendar.nextMonth : t.calendar.nextWeek}>
           <ChevronRight className="size-4" />
         </Link>
         <div className="ml-auto flex gap-2">
-          <Button variant="ghost" onClick={() => setRulesOpen(true)} aria-label="Wiederholungen verwalten">
+          <Button variant="ghost" onClick={() => setRulesOpen(true)} aria-label={t.calendar.manageRules}>
             <Repeat className="size-4" />
-            <span className="hidden sm:inline">Wiederholungen</span>
+            <span className="hidden sm:inline">{t.calendar.rules}</span>
           </Button>
           <Button variant="primary" onClick={() => setPlanOpen(true)}>
             <CalendarPlus className="size-4" />
-            <span className="hidden sm:inline">Planen</span>
+            <span className="hidden sm:inline">{t.calendar.plan}</span>
           </Button>
         </div>
       </div>
@@ -169,7 +171,7 @@ export function CalendarView(props: {
                       type="button"
                       onClick={() => setSelected(d)}
                       aria-pressed={isSel}
-                      aria-label={`${formatDay(d, "long")}: ${STATE_LABEL[state]}`}
+                      aria-label={`${formatDay(d, "long")}: ${stateLabel(t)[state]}`}
                       className={cn(
                         "flex flex-col items-stretch rounded-md border p-1 text-left transition-colors",
                         view === "month" ? "min-h-14 sm:min-h-24" : "min-h-28 sm:min-h-40",
@@ -202,7 +204,7 @@ export function CalendarView(props: {
                             const st = displayStatus(e, today);
                             return (
                               <span key={e.id} className={cn("truncate rounded-sm px-1.5 py-0.5 text-[11px] font-medium", STATUS_STYLE[st])}>
-                                {e.kind === "rest" ? "Ruhetag" : e.title}
+                                {e.kind === "rest" ? t.calendar.restDay : e.title}
                               </span>
                             );
                           })}
@@ -232,13 +234,13 @@ export function CalendarView(props: {
   );
 }
 
-const STATE_LABEL: Record<ReturnType<typeof dayState>, string> = {
-  trained: "Training absolviert",
-  planned: "Training geplant",
-  missed: "Geplantes Training nicht absolviert",
-  rest: "Ruhetag",
-  empty: "Nichts geplant",
-};
+const stateLabel = (t: Dict): Record<ReturnType<typeof dayState>, string> => ({
+  trained: t.calendar.stateTrained,
+  planned: t.calendar.statePlanned,
+  missed: t.calendar.stateMissed,
+  rest: t.calendar.stateRest,
+  empty: t.calendar.stateEmpty,
+});
 
 function DayDot({ state }: { state: ReturnType<typeof dayState> }) {
   if (state === "empty") return <span className="size-1.5" />;
@@ -252,12 +254,13 @@ function DayDot({ state }: { state: ReturnType<typeof dayState> }) {
 }
 
 function Legend() {
+  const t = useT();
   const items: [string, string][] = [
-    ["bg-accent", "Absolviert"],
-    ["border border-accent", "Geplant"],
-    ["border border-info", "Verschoben"],
-    ["border border-warning", "Nicht absolviert"],
-    ["bg-surface-3", "Ruhetag / ausgefallen"],
+    ["bg-accent", t.calendar.legendDone],
+    ["border border-accent", t.calendar.legendPlanned],
+    ["border border-info", t.calendar.legendMoved],
+    ["border border-warning", t.calendar.legendMissed],
+    ["bg-surface-3", t.calendar.legendRest],
   ];
   return (
     <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 px-1 text-xs text-muted">
@@ -287,6 +290,7 @@ function DayPanel({
   onPlan: () => void;
 }) {
   const router = useRouter();
+  const t = useT();
   const { start, pending } = useStartWorkout();
   const [moveId, setMoveId] = useState<string | null>(null);
   const [editEntry, setEditEntry] = useState<CalendarEntry | null>(null);
@@ -302,7 +306,7 @@ function DayPanel({
       action:
         previous !== "cancelled"
           ? {
-              label: "Rückgängig",
+              label: t.common.undoAction,
               onClick: async () => {
                 const r = await restoreEntryStatusAction(id, previous as "planned" | "skipped" | "completed");
                 if (r.ok) router.refresh();
@@ -317,7 +321,7 @@ function DayPanel({
   async function markRest() {
     const res = await planEntryAction({ date, kind: "rest" });
     if (!res.ok) return void toast.error(res.error);
-    toast.success("Ruhetag eingetragen");
+    toast.success(t.calendar.restAdded);
     router.refresh();
   }
 
@@ -325,7 +329,7 @@ function DayPanel({
     <Card className="h-fit p-4">
       <div className="mb-3 flex items-baseline justify-between gap-2">
         <h2 className="font-semibold">{formatDay(date, "long")}</h2>
-        {date === today ? <Badge tone="accent">Heute</Badge> : null}
+        {date === today ? <Badge tone="accent">{t.common.today}</Badge> : null}
       </div>
       <div className="space-y-2">
         {workouts.map((w) => (
@@ -339,7 +343,7 @@ function DayPanel({
             </span>
             <span className="min-w-0 flex-1">
               <span className="block truncate font-medium">{w.name}</span>
-              <span className="text-xs text-muted">{w.status === "active" ? "Läuft gerade" : "Absolviert · Ergebnisse ansehen"}</span>
+              <span className="text-xs text-muted">{w.status === "active" ? t.calendar.running : t.calendar.doneViewResults}</span>
             </span>
             <ChevronRight className="size-4 text-subtle" />
           </Link>
@@ -353,16 +357,16 @@ function DayPanel({
                   {e.kind === "rest" ? <BedDouble className="size-4" /> : <CalendarClock className="size-4" />}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className={cn("truncate font-medium", st === "skipped" && "text-muted line-through")}>{e.kind === "rest" ? "Ruhetag" : e.title}</p>
+                  <p className={cn("truncate font-medium", st === "skipped" && "text-muted line-through")}>{e.kind === "rest" ? t.calendar.restDay : e.title}</p>
                   <p className="text-xs text-muted">
-                    {DISPLAY_STATUS_LABELS[st]}
-                    {e.movedFrom ? ` · ursprünglich ${formatDay(e.movedFrom, "dayMonth")}` : ""}
-                    {e.ruleId ? " · wiederkehrend" : ""}
+                    {t.calendarStatus[st]}
+                    {e.movedFrom ? fmt(t.calendar.originally, { date: formatDay(e.movedFrom, "dayMonth") }) : ""}
+                    {e.ruleId ? t.calendar.recurring : ""}
                   </p>
                 </div>
                 <Dropdown>
                   <DropdownTrigger asChild>
-                    <Button size="icon-sm" variant="ghost" aria-label="Aktionen">
+                    <Button size="icon-sm" variant="ghost" aria-label={t.calendar.actions}>
                       <Ellipsis className="size-4" />
                     </Button>
                   </DropdownTrigger>
@@ -370,25 +374,25 @@ function DayPanel({
                     {e.kind === "workout" ? (
                       <>
                         <DropdownItem icon={Pencil} onSelect={() => setEditEntry(e)}>
-                          Bearbeiten
+                          {t.common.edit}
                         </DropdownItem>
                         <DropdownItem icon={CalendarClock} onSelect={() => setMoveId(e.id)}>
-                          Verschieben
+                          {t.calendar.move}
                         </DropdownItem>
                         {e.status === "skipped" ? (
-                          <DropdownItem icon={RotateCcw} onSelect={() => setStatus(e, "planned", "Wieder geplant")}>
-                            Wieder planen
+                          <DropdownItem icon={RotateCcw} onSelect={() => setStatus(e, "planned", t.calendar.replanned)}>
+                            {t.calendar.replan}
                           </DropdownItem>
                         ) : (
-                          <DropdownItem icon={X} onSelect={() => setStatus(e, "skipped", "Als ausgefallen markiert")}>
-                            Als ausgefallen markieren
+                          <DropdownItem icon={X} onSelect={() => setStatus(e, "skipped", t.calendar.markedSkipped)}>
+                            {t.calendar.markSkipped}
                           </DropdownItem>
                         )}
                         <DropdownSeparator />
                       </>
                     ) : null}
-                    <DropdownItem icon={Trash2} destructive onSelect={() => setStatus(e, "cancelled", e.kind === "rest" ? "Ruhetag entfernt" : "Planung entfernt")}>
-                      Entfernen
+                    <DropdownItem icon={Trash2} destructive onSelect={() => setStatus(e, "cancelled", e.kind === "rest" ? t.calendar.restRemoved : t.calendar.planRemoved)}>
+                      {t.common.remove}
                     </DropdownItem>
                   </DropdownContent>
                 </Dropdown>
@@ -397,22 +401,22 @@ function DayPanel({
               {e.kind === "workout" && e.status === "planned" ? (
                 <Button variant="primary" size="sm" className="mt-2.5 w-full" loading={pending === e.id} onClick={() => start({ plannedEntryId: e.id }, e.id)}>
                   {pending !== e.id ? <Play className="size-3.5 fill-current" /> : null}
-                  Training starten
+                  {t.shell.startWorkout}
                 </Button>
               ) : null}
             </div>
           );
         })}
         {workouts.length === 0 && visibleEntries.length === 0 ? (
-          <p className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted">Für diesen Tag ist nichts geplant.</p>
+          <p className="rounded-md border border-dashed border-border px-3 py-5 text-center text-sm text-muted">{t.calendar.nothingPlanned}</p>
         ) : null}
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2">
         <Button size="sm" onClick={onPlan}>
-          <CalendarPlus className="size-4" /> Training planen
+          <CalendarPlus className="size-4" /> {t.calendar.planWorkout}
         </Button>
         <Button size="sm" onClick={markRest} disabled={hasRest}>
-          <BedDouble className="size-4" /> Ruhetag
+          <BedDouble className="size-4" /> {t.calendar.restDay}
         </Button>
       </div>
       <MoveDialog id={moveId} onClose={() => setMoveId(null)} initialDate={date} />
@@ -423,12 +427,13 @@ function DayPanel({
 
 function MoveDialog({ id, onClose, initialDate }: { id: string | null; onClose: () => void; initialDate: YMD }) {
   const router = useRouter();
+  const t = useT();
   const [date, setDate] = useState(initialDate);
   const [busy, setBusy] = useState(false);
   return (
     <Dialog open={!!id} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        title="Training verschieben"
+        title={t.calendar.moveTitle}
         size="sm"
         footer={
           <Button
@@ -440,22 +445,22 @@ function MoveDialog({ id, onClose, initialDate }: { id: string | null; onClose: 
               const res = await moveEntryAction(id, date);
               setBusy(false);
               if (!res.ok) return void toast.error(res.error);
-              toast.success(`Verschoben auf ${formatDay(date, "medium")}`);
+              toast.success(fmt(t.calendar.movedTo, { date: formatDay(date, "medium") }));
               onClose();
               router.refresh();
             }}
           >
-            Verschieben
+            {t.calendar.move}
           </Button>
         }
       >
-        <Field label="Neues Datum" htmlFor="move-date">
+        <Field label={t.calendar.newDate} htmlFor="move-date">
           <Input id="move-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
         </Field>
         <div className="mt-3 flex flex-wrap gap-2">
           {[1, 2, 7].map((n) => (
             <Button key={n} size="sm" variant="ghost" onClick={() => setDate(addDays(initialDate, n))}>
-              +{n} {n === 1 ? "Tag" : "Tage"}
+              {plural(t.calendar.plusDays, n)}
             </Button>
           ))}
         </div>
@@ -466,6 +471,7 @@ function MoveDialog({ id, onClose, initialDate }: { id: string | null; onClose: 
 
 function EditEntryDialog({ entry, onClose, templates }: { entry: CalendarEntry | null; onClose: () => void; templates: { id: string; name: string }[] }) {
   const router = useRouter();
+  const t = useT();
   const [templateId, setTemplateId] = useState("");
   const [title, setTitle] = useState("");
   const [notes, setNotes] = useState("");
@@ -479,7 +485,7 @@ function EditEntryDialog({ entry, onClose, templates }: { entry: CalendarEntry |
   return (
     <Dialog open={!!entry} onOpenChange={(o) => !o && onClose()}>
       <DialogContent
-        title="Geplantes Training bearbeiten"
+        title={t.calendar.editPlanned}
         size="sm"
         footer={
           <Button
@@ -492,22 +498,22 @@ function EditEntryDialog({ entry, onClose, templates }: { entry: CalendarEntry |
               router.refresh();
             }}
           >
-            Speichern
+            {t.common.save}
           </Button>
         }
       >
         <div className="space-y-4">
-          <Field label="Vorlage" htmlFor="ee-tpl">
+          <Field label={t.calendar.template} htmlFor="ee-tpl">
             <Select
               id="ee-tpl"
               value={templateId}
               onChange={(e) => {
                 setTemplateId(e.target.value);
-                const t = templates.find((x) => x.id === e.target.value);
-                if (t) setTitle(t.name);
+                const tpl = templates.find((x) => x.id === e.target.value);
+                if (tpl) setTitle(tpl.name);
               }}
             >
-              <option value="">Ohne Vorlage</option>
+              <option value="">{t.calendar.noTemplate}</option>
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>
                   {t.name}
@@ -515,10 +521,10 @@ function EditEntryDialog({ entry, onClose, templates }: { entry: CalendarEntry |
               ))}
             </Select>
           </Field>
-          <Field label="Titel" htmlFor="ee-title">
+          <Field label={t.calendar.entryTitle} htmlFor="ee-title">
             <Input id="ee-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} />
           </Field>
-          <Field label="Notiz" htmlFor="ee-notes">
+          <Field label={t.common.note} htmlFor="ee-notes">
             <Textarea id="ee-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
           </Field>
         </div>
@@ -529,6 +535,7 @@ function EditEntryDialog({ entry, onClose, templates }: { entry: CalendarEntry |
 
 function PlanDialog({ open, onOpenChange, date, templates }: { open: boolean; onOpenChange: (v: boolean) => void; date: YMD; templates: { id: string; name: string }[] }) {
   const router = useRouter();
+  const t = useT();
   const [kind, setKind] = useState<"workout" | "rest">("workout");
   const [d, setD] = useState(date);
   const [templateId, setTemplateId] = useState(templates[0]?.id ?? "");
@@ -553,13 +560,13 @@ function PlanDialog({ open, onOpenChange, date, templates }: { open: boolean; on
 
   async function submit() {
     setBusy(true);
-    const tpl = templates.find((t) => t.id === templateId);
+    const tpl = templates.find((x) => x.id === templateId);
     const res = repeat
       ? await createRuleAction({ kind, templateId: kind === "workout" ? templateId || null : null, title: title || tpl?.name || null, weekdays, startDate: d, endDate: endDate || null })
       : await planEntryAction({ date: d, kind, templateId: kind === "workout" ? templateId || null : null, title: title || tpl?.name || null, notes: notes || null });
     setBusy(false);
     if (!res.ok) return void toast.error(res.error);
-    toast.success(repeat ? "Wiederholung angelegt" : kind === "rest" ? "Ruhetag eingetragen" : "Training geplant");
+    toast.success(repeat ? t.calendar.ruleCreated : kind === "rest" ? t.calendar.restAdded : t.calendar.planned);
     onOpenChange(false);
     router.refresh();
   }
@@ -567,38 +574,38 @@ function PlanDialog({ open, onOpenChange, date, templates }: { open: boolean; on
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        title="Planen"
+        title={t.calendar.plan}
         size="md"
         footer={
           <>
             <Button variant="ghost" onClick={() => onOpenChange(false)}>
-              Abbrechen
+              {t.common.cancel}
             </Button>
             <Button variant="primary" loading={busy} onClick={submit} disabled={(kind === "workout" && !templateId && !title.trim()) || (repeat && weekdays.length === 0)}>
-              {repeat ? "Wiederholung anlegen" : "Eintragen"}
+              {repeat ? t.calendar.createRule : t.calendar.add}
             </Button>
           </>
         }
       >
         <div className="space-y-4">
           <Segmented
-            aria-label="Art"
+            aria-label={t.calendar.kind}
             className="flex w-full"
             value={kind}
             onChange={setKind}
             options={[
-              { value: "workout", label: "Training" },
-              { value: "rest", label: "Ruhetag" },
+              { value: "workout", label: t.calendar.workout },
+              { value: "rest", label: t.calendar.restDay },
             ]}
           />
-          <Field label={repeat ? "Ab" : "Datum"} htmlFor="plan-date">
+          <Field label={repeat ? t.calendar.from : t.calendar.date} htmlFor="plan-date">
             <Input id="plan-date" type="date" value={d} onChange={(e) => setD(e.target.value)} />
           </Field>
           {kind === "workout" ? (
             <>
-              <Field label="Vorlage" htmlFor="plan-tpl" hint={templates.length === 0 ? "Noch keine Vorlagen – du kannst auch nur einen Titel vergeben." : undefined}>
+              <Field label={t.calendar.template} htmlFor="plan-tpl" hint={templates.length === 0 ? t.calendar.noTemplatesHint : undefined}>
                 <Select id="plan-tpl" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
-                  <option value="">Ohne Vorlage</option>
+                  <option value="">{t.calendar.noTemplate}</option>
                   {templates.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.name}
@@ -606,19 +613,19 @@ function PlanDialog({ open, onOpenChange, date, templates }: { open: boolean; on
                   ))}
                 </Select>
               </Field>
-              <Field label="Titel (optional)" htmlFor="plan-title">
-                <Input id="plan-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={templates.find((t) => t.id === templateId)?.name ?? "z. B. Cardio + Core"} maxLength={120} />
+              <Field label={t.calendar.titleOptional} htmlFor="plan-title">
+                <Input id="plan-title" value={title} onChange={(e) => setTitle(e.target.value)} placeholder={templates.find((x) => x.id === templateId)?.name ?? t.calendar.titlePlaceholder} maxLength={120} />
               </Field>
             </>
           ) : null}
           <label className="flex min-h-11 items-center gap-3 text-sm">
             <input type="checkbox" checked={repeat} onChange={(e) => setRepeat(e.target.checked)} className="size-4 accent-[var(--accent)]" />
-            Wöchentlich wiederholen
+            {t.calendar.repeatWeekly}
           </label>
           {repeat ? (
             <div className="space-y-3 rounded-md border border-border p-3">
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="Wochentage">
-                {WEEKDAYS.map((w, i) => {
+              <div className="flex flex-wrap gap-1.5" role="group" aria-label={t.calendar.weekdays}>
+                {weekdayNames().map((w, i) => {
                   const n = i + 1;
                   const on = weekdays.includes(n);
                   return (
@@ -634,12 +641,12 @@ function PlanDialog({ open, onOpenChange, date, templates }: { open: boolean; on
                   );
                 })}
               </div>
-              <Field label="Endet am (optional)" htmlFor="plan-end">
+              <Field label={t.calendar.endsOptional} htmlFor="plan-end">
                 <Input id="plan-end" type="date" value={endDate} min={d} onChange={(e) => setEndDate(e.target.value)} />
               </Field>
             </div>
           ) : kind === "workout" ? (
-            <Field label="Notiz (optional)" htmlFor="plan-notes">
+            <Field label={t.calendar.noteOptional} htmlFor="plan-notes">
               <Textarea id="plan-notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} />
             </Field>
           ) : null}
@@ -651,12 +658,13 @@ function PlanDialog({ open, onOpenChange, date, templates }: { open: boolean; on
 
 function RulesDialog({ open, onOpenChange, rules, templates }: { open: boolean; onOpenChange: (v: boolean) => void; rules: CalRule[]; templates: { id: string; name: string }[] }) {
   const router = useRouter();
+  const t = useT();
   void templates;
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title="Wiederkehrende Planung" description="Wöchentliche Pläne erzeugen automatisch Einträge im Kalender." size="md">
+      <DialogContent title={t.calendar.rulesTitle} description={t.calendar.rulesText} size="md">
         {rules.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted">Noch keine Wiederholungen. Lege sie über „Planen“ an.</p>
+          <p className="py-6 text-center text-sm text-muted">{t.calendar.noRules}</p>
         ) : (
           <ul className="divide-y divide-border">
             {rules.map((r) => (
@@ -667,8 +675,8 @@ function RulesDialog({ open, onOpenChange, rules, templates }: { open: boolean; 
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium">{r.title}</p>
                   <p className="text-xs text-muted">
-                    {weekdaysLabel(r.weekdays)} · ab {formatDay(r.startDate, "short")}
-                    {r.endDate ? ` bis ${formatDay(r.endDate, "short")}` : ""}
+                    {fmt(t.calendar.ruleRange, { days: weekdaysLabel(r.weekdays), from: formatDay(r.startDate, "short") })}
+                    {r.endDate ? fmt(t.calendar.ruleUntil, { date: formatDay(r.endDate, "short") }) : ""}
                   </p>
                 </div>
                 <Button
@@ -678,11 +686,11 @@ function RulesDialog({ open, onOpenChange, rules, templates }: { open: boolean; 
                   onClick={async () => {
                     const res = await endRuleAction(r.id);
                     if (!res.ok) return void toast.error(res.error);
-                    toast.success("Wiederholung beendet – vergangene Einträge bleiben erhalten");
+                    toast.success(t.calendar.ruleEnded);
                     router.refresh();
                   }}
                 >
-                  Beenden
+                  {t.calendar.endRule}
                 </Button>
               </li>
             ))}

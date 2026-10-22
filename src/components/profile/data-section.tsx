@@ -9,6 +9,15 @@ import { Button, buttonClasses } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { activeIntlLocale, fmt, plural } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
+
+/** Confirmation token the server expects; the user types the word of their UI language instead. */
+const SERVER_CONFIRM = "ERSETZEN";
+
+function isConfirmed(input: string, word: string) {
+  return input.trim().toLocaleUpperCase() === word.toLocaleUpperCase();
+}
 
 interface Summary {
   exercises: number;
@@ -22,6 +31,7 @@ interface Summary {
 
 export function DataSection({ backups }: { backups: { dir: string; interval: number; keep: number; files: { name: string; size: number; createdAt: string }[] } }) {
   const router = useRouter();
+  const t = useT();
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [preview, setPreview] = useState<{ summary: Summary; exportedAt: string } | null>(null);
@@ -35,9 +45,9 @@ export function DataSection({ backups }: { backups: { dir: string; interval: num
     setBusy(true);
     try {
       const res = await fetch(`/api/import?mode=${mode}${mode === "apply" ? "&confirm=ERSETZEN" : ""}`, { method: "POST", body: file, headers: { "content-type": "application/octet-stream" } });
-      const data = await res.json().catch(() => ({ ok: false, errors: ["Unerwartete Antwort vom Server."] }));
+      const data = await res.json().catch(() => ({ ok: false, errors: [t.data.unexpectedResponse] }));
       if (!data.ok) {
-        setErrors(data.errors ?? ["Import fehlgeschlagen."]);
+        setErrors(data.errors ?? [t.data.importFailed]);
         setPreview(null);
         return;
       }
@@ -45,7 +55,7 @@ export function DataSection({ backups }: { backups: { dir: string; interval: num
         setErrors(null);
         setPreview({ summary: data.summary, exportedAt: data.exportedAt });
       } else {
-        toast.success(`Import abgeschlossen. Sicherheits-Backup: ${data.safetyBackup}`);
+        toast.success(fmt(t.data.importDone, { name: data.safetyBackup }));
         reset();
         router.refresh();
       }
@@ -68,11 +78,9 @@ export function DataSection({ backups }: { backups: { dir: string; interval: num
         <h2 className="flex items-center gap-2 text-[15px] font-semibold">
           <Download className="size-4 text-muted" /> Export
         </h2>
-        <p className="mt-1 text-sm text-muted">
-          Vollständiger Export als JSON: Profil, Einstellungen, Übungen, Vorlagen, Kalender, Trainings mit allen Sätzen und Notizen sowie Körpergewicht. Format dokumentiert in docs/EXPORT_FORMAT.md.
-        </p>
+        <p className="mt-1 text-sm text-muted">{t.data.exportText}</p>
         <a href="/api/export" className={buttonClasses("secondary", "md", "mt-4")} download>
-          <Download className="size-4" /> Daten exportieren
+          <Download className="size-4" /> {t.data.exportButton}
         </a>
       </Card>
 
@@ -80,7 +88,7 @@ export function DataSection({ backups }: { backups: { dir: string; interval: num
         <h2 className="flex items-center gap-2 text-[15px] font-semibold">
           <FileUp className="size-4 text-muted" /> Import
         </h2>
-        <p className="mt-1 text-sm text-muted">Stellt einen Export oder ein Backup (.json / .json.gz) wieder her. Alle aktuellen Daten werden ersetzt – vorher wird automatisch ein Sicherheits-Backup erstellt.</p>
+        <p className="mt-1 text-sm text-muted">{t.data.importText}</p>
         <input
           ref={fileRef}
           type="file"
@@ -91,16 +99,16 @@ export function DataSection({ backups }: { backups: { dir: string; interval: num
             setPreview(null);
             setErrors(null);
           }}
-          aria-label="Exportdatei wählen"
+          aria-label={t.data.chooseFile}
         />
         {file && !preview ? (
           <Button className="mt-3" onClick={() => upload("preview")} loading={busy}>
-            Datei prüfen
+            {t.data.checkFile}
           </Button>
         ) : null}
         {errors ? (
           <div className="mt-3 rounded-md border border-danger/40 bg-danger-soft p-3 text-sm" role="alert">
-            <p className="font-medium text-danger">Datei kann nicht importiert werden</p>
+            <p className="font-medium text-danger">{t.data.cannotImport}</p>
             <ul className="mt-1 list-disc pl-5 text-muted">
               {errors.map((e, i) => (
                 <li key={i}>{e}</li>
@@ -110,22 +118,26 @@ export function DataSection({ backups }: { backups: { dir: string; interval: num
         ) : null}
         {preview ? (
           <div className="mt-3 space-y-3 rounded-md border border-warning/40 bg-warning-soft p-3 text-sm">
-            <p className="font-medium text-warning">Gültige Exportdatei vom {new Date(preview.exportedAt).toLocaleString("de-DE")}</p>
+            <p className="font-medium text-warning">{fmt(t.data.validFile, { date: new Date(preview.exportedAt).toLocaleString(activeIntlLocale()) })}</p>
             <p className="text-muted">
-              {preview.summary.workouts} Trainings · {preview.summary.sets} Sätze · {preview.summary.templates} Vorlagen · {preview.summary.customExercises} eigene Übungen · {preview.summary.plannedEntries} Kalendereinträge ·{" "}
-              {preview.summary.bodyWeight} Gewichtseinträge
+              {fmt(t.data.summary, {
+                workouts: preview.summary.workouts,
+                sets: preview.summary.sets,
+                templates: preview.summary.templates,
+                custom: preview.summary.customExercises,
+                planned: preview.summary.plannedEntries,
+                bodyweight: preview.summary.bodyWeight,
+              })}
             </p>
-            <p>
-              Zum Ersetzen aller aktuellen Daten <strong>ERSETZEN</strong> eingeben:
-            </p>
+            <p>{fmt(t.data.typeToReplace, { word: t.data.confirmWord })}</p>
             <div className="flex gap-2">
-              <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} aria-label="Bestätigung" placeholder="ERSETZEN" />
-              <Button variant="danger" disabled={confirm !== "ERSETZEN"} loading={busy} onClick={() => upload("apply")}>
-                Importieren
+              <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} aria-label={t.data.confirmation} placeholder={t.data.confirmWord} />
+              <Button variant="danger" disabled={!isConfirmed(confirm, t.data.confirmWord)} loading={busy} onClick={() => upload("apply")}>
+                {t.data.import}
               </Button>
             </div>
             <Button variant="ghost" size="sm" onClick={reset}>
-              Abbrechen
+              {t.common.cancel}
             </Button>
           </div>
         ) : null}
@@ -135,21 +147,22 @@ export function DataSection({ backups }: { backups: { dir: string; interval: num
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="flex items-center gap-2 text-[15px] font-semibold">
-              <ShieldCheck className="size-4 text-muted" /> Backups
+              <ShieldCheck className="size-4 text-muted" /> {t.data.backupsTitle}
             </h2>
             <p className="mt-1 text-sm text-muted">
-              {backups.interval ? `Automatisch alle ${backups.interval} h` : "Automatische Backups deaktiviert"} · die letzten {backups.keep} werden behalten · Verzeichnis <code className="text-xs">{backups.dir}</code>
+              {backups.interval ? fmt(t.data.autoEvery, { n: backups.interval }) : t.data.autoDisabled} · {fmt(t.data.keepLast, { n: backups.keep })} · {t.data.directory}{" "}
+              <code className="text-xs">{backups.dir}</code>
             </p>
           </div>
           <Button
             onClick={async () => {
               const res = await createBackupAction();
               if (!res.ok) return void toast.error(res.error);
-              toast.success(`Backup erstellt: ${res.data.name}`);
+              toast.success(fmt(t.data.backupCreated, { name: res.data.name }));
               router.refresh();
             }}
           >
-            <Database className="size-4" /> Backup jetzt erstellen
+            <Database className="size-4" /> {t.data.createBackup}
           </Button>
         </div>
         {backups.files.length ? (
@@ -158,20 +171,20 @@ export function DataSection({ backups }: { backups: { dir: string; interval: num
               <li key={f.name} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
                 <span className="min-w-0 flex-1 truncate font-mono text-xs">{f.name}</span>
                 <span className="tabular text-xs text-subtle">{Math.max(1, Math.round(f.size / 1024))} KB</span>
-                <a href={`/api/backups/${encodeURIComponent(f.name)}`} className="grid size-9 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-text" aria-label={`${f.name} herunterladen`} download>
+                <a href={`/api/backups/${encodeURIComponent(f.name)}`} className="grid size-9 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-text" aria-label={fmt(t.data.download, { name: f.name })} download>
                   <HardDriveDownload className="size-4" />
                 </a>
-                <button type="button" onClick={() => setRestoreName(f.name)} className="grid size-9 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-text" aria-label={`${f.name} wiederherstellen`}>
+                <button type="button" onClick={() => setRestoreName(f.name)} className="grid size-9 place-items-center rounded-sm text-muted hover:bg-surface-2 hover:text-text" aria-label={fmt(t.data.restore, { name: f.name })}>
                   <RotateCcw className="size-4" />
                 </button>
               </li>
             ))}
           </ul>
         ) : (
-          <p className="mt-4 text-sm text-muted">Noch keine Backups vorhanden.</p>
+          <p className="mt-4 text-sm text-muted">{t.data.noBackups}</p>
         )}
         <p className="mt-3 text-xs text-subtle">
-          App-Backups enthalten alle Daten im Exportformat. Zusätzlich empfiehlt sich ein Datenbank-Dump (scripts/backup-db.sh) und eine Kopie außerhalb des Servers – siehe README.
+          {t.data.backupHint}
         </p>
       </Card>
 
@@ -183,39 +196,40 @@ export function DataSection({ backups }: { backups: { dir: string; interval: num
 function RestoreDialog({ name, onClose, onDone }: { name: string | null; onClose: () => void; onDone: () => void }) {
   const [confirm, setConfirm] = useState("");
   const [busy, setBusy] = useState(false);
+  const t = useT();
   return (
     <Dialog open={!!name} onOpenChange={(o) => !o && !busy && onClose()}>
       <DialogContent
-        title="Backup wiederherstellen?"
-        description={`Alle aktuellen Daten werden durch ${name} ersetzt. Vorher wird ein Sicherheits-Backup erstellt.`}
+        title={t.data.restoreTitle}
+        description={fmt(t.data.restoreText, { name: name ?? "" })}
         size="sm"
         footer={
           <>
             <Button variant="ghost" onClick={onClose} disabled={busy}>
-              Abbrechen
+              {t.common.cancel}
             </Button>
             <Button
               variant="danger"
               loading={busy}
-              disabled={confirm !== "ERSETZEN"}
+              disabled={!isConfirmed(confirm, t.data.confirmWord)}
               onClick={async () => {
                 if (!name) return;
                 setBusy(true);
-                const res = await restoreBackupAction(name, confirm);
+                const res = await restoreBackupAction(name, SERVER_CONFIRM);
                 setBusy(false);
                 if (!res.ok) return void toast.error(res.error);
-                toast.success(`Wiederhergestellt: ${res.data.workouts} Trainings`);
+                toast.success(plural(t.data.restored, res.data.workouts));
                 setConfirm("");
                 onClose();
                 onDone();
               }}
             >
-              Wiederherstellen
+              {t.data.restoreButton}
             </Button>
           </>
         }
       >
-        <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder="ERSETZEN" aria-label="Zur Bestätigung ERSETZEN eingeben" />
+        <Input value={confirm} onChange={(e) => setConfirm(e.target.value)} placeholder={t.data.confirmWord} aria-label={fmt(t.data.typeConfirm, { word: t.data.confirmWord })} />
       </DialogContent>
     </Dialog>
   );

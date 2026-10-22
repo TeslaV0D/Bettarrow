@@ -10,24 +10,27 @@ import { formatDay } from "@/lib/format";
 import { ExerciseSearchBar } from "./exercise-filters";
 import { FavoriteButton } from "./favorite-button";
 import { exerciseSubtitle, useExerciseSearch, type Reference } from "./use-exercise-search";
+import { fmt, plural } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 
 export function ExerciseBrowser({ catalog, reference }: { catalog: CatalogExercise[]; reference: Reference }) {
   const { filter, update, reset, results, maps } = useExerciseSearch(catalog, reference);
+  const t = useT();
   return (
     <div className="space-y-4">
       <ExerciseSearchBar filter={filter} update={update} reset={reset} reference={reference} />
       <p className="text-sm text-muted" aria-live="polite">
-        {results.length} {results.length === 1 ? "Übung" : "Übungen"}
+        {plural(t.units.exercises, results.length)}
       </p>
       {results.length === 0 ? (
         <EmptyState
           icon={Dumbbell}
-          title="Keine Übung gefunden"
-          description="Passe Suche oder Filter an – oder lege eine eigene Übung an."
+          title={t.exercises.noneFound}
+          description={t.exercises.noneFoundText}
           action={
             <Link href="/exercises/new" className={buttonClasses("primary", "md")}>
               <Plus className="size-4" aria-hidden />
-              Eigene Übung anlegen
+              {t.exercises.createCustom}
             </Link>
           }
         />
@@ -39,12 +42,12 @@ export function ExerciseBrowser({ catalog, reference }: { catalog: CatalogExerci
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="truncate font-medium">{e.name}</span>
-                    {e.isCustom ? <Badge tone="info">Eigene</Badge> : null}
-                    {e.archived ? <Badge tone="outline">Archiviert</Badge> : null}
+                    {e.isCustom ? <Badge tone="info">{t.exercises.custom}</Badge> : null}
+                    {e.archived ? <Badge tone="outline">{t.exercises.archived}</Badge> : null}
                   </span>
                   <span className="mt-0.5 block truncate text-sm text-muted">
                     {exerciseSubtitle(e, maps)}
-                    {e.lastUsed ? <span className="text-subtle"> · zuletzt {formatDay(e.lastUsed, "dayMonth")}</span> : null}
+                    {e.lastUsed ? <span className="text-subtle"> · {fmt(t.start.lastUsed, { date: formatDay(e.lastUsed, "dayMonth") })}</span> : null}
                   </span>
                 </span>
               </Link>

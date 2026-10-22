@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { getStartOptionsAction, type StartOptions } from "@/server/actions/workouts";
 import { formatDay } from "@/lib/format";
+import { fmt, plural } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 import { useStartWorkout } from "./use-start-workout";
 
 export function StartWorkoutDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
@@ -15,6 +17,7 @@ export function StartWorkoutDialog({ open, onOpenChange }: { open: boolean; onOp
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const { start, pending } = useStartWorkout();
+  const t = useT();
 
   useEffect(() => {
     if (!open) return;
@@ -43,7 +46,7 @@ export function StartWorkoutDialog({ open, onOpenChange }: { open: boolean; onOp
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title="Training starten" description="Wähle eine Vorlage oder starte frei." size="md">
+      <DialogContent title={t.shell.startWorkout} description={t.start.description} size="md">
         <div className="space-y-5">
           <button
             type="button"
@@ -55,21 +58,21 @@ export function StartWorkoutDialog({ open, onOpenChange }: { open: boolean; onOp
               {pending === "free" ? <Loader2 className="size-5 animate-spin" /> : <Plus className="size-5" />}
             </span>
             <span className="flex-1">
-              <span className="block font-medium">Freies Training</span>
-              <span className="block text-sm text-muted">Ohne Vorlage starten, Übungen unterwegs hinzufügen</span>
+              <span className="block font-medium">{t.start.free}</span>
+              <span className="block text-sm text-muted">{t.start.freeHint}</span>
             </span>
           </button>
 
           {options?.planned.length ? (
             <section>
-              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-subtle">Heute geplant</h3>
+              <h3 className="mb-2 text-xs font-medium uppercase tracking-wider text-subtle">{t.start.plannedToday}</h3>
               <div className="space-y-1.5">
                 {options.planned.map((p) => (
                   <OptionRow
                     key={p.id}
                     icon={<CalendarCheck className="size-4" />}
                     title={p.title}
-                    subtitle="Geplante Einheit"
+                    subtitle={t.start.plannedSession}
                     loading={pending === p.id}
                     disabled={pending !== null}
                     onClick={() => go({ plannedEntryId: p.id }, p.id)}
@@ -81,15 +84,15 @@ export function StartWorkoutDialog({ open, onOpenChange }: { open: boolean; onOp
 
           <section>
             <div className="mb-2 flex items-center justify-between">
-              <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">Vorlagen</h3>
+              <h3 className="text-xs font-medium uppercase tracking-wider text-subtle">{t.nav.templates}</h3>
               <Link href="/templates" onClick={() => onOpenChange(false)} className="text-xs font-medium text-accent hover:underline">
-                Verwalten
+                {t.common.manage}
               </Link>
             </div>
             {(options?.templates.length ?? 0) > 6 ? (
               <div className="relative mb-2">
                 <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-subtle" aria-hidden />
-                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Vorlage suchen" className="pl-9" aria-label="Vorlage suchen" />
+                <Input value={query} onChange={(e) => setQuery(e.target.value)} placeholder={t.start.searchTemplate} className="pl-9" aria-label={t.start.searchTemplate} />
               </div>
             ) : null}
             {error ? <p className="text-sm text-danger">{error}</p> : null}
@@ -104,26 +107,26 @@ export function StartWorkoutDialog({ open, onOpenChange }: { open: boolean; onOp
               <div className="rounded-md border border-dashed border-border px-4 py-6 text-center text-sm text-muted">
                 {options.templates.length === 0 ? (
                   <>
-                    Noch keine Vorlagen.{" "}
+                    {t.start.noTemplates}{" "}
                     <Link href="/templates/new" onClick={() => onOpenChange(false)} className="font-medium text-accent hover:underline">
-                      Vorlage erstellen
+                      {t.templates.create}
                     </Link>
                   </>
                 ) : (
-                  "Keine Treffer."
+                  t.common.noResults
                 )}
               </div>
             ) : null}
             <div className="space-y-1.5">
-              {templates.map((t) => (
+              {templates.map((tpl) => (
                 <OptionRow
-                  key={t.id}
+                  key={tpl.id}
                   icon={<ClipboardList className="size-4" />}
-                  title={t.name}
-                  subtitle={`${t.exerciseCount} ${t.exerciseCount === 1 ? "Übung" : "Übungen"}${t.lastUsed ? ` · zuletzt ${formatDay(t.lastUsed, "dayMonth")}` : ""}`}
-                  loading={pending === t.id}
+                  title={tpl.name}
+                  subtitle={`${plural(t.units.exercises, tpl.exerciseCount)}${tpl.lastUsed ? ` · ${fmt(t.start.lastUsed, { date: formatDay(tpl.lastUsed, "dayMonth") })}` : ""}`}
+                  loading={pending === tpl.id}
                   disabled={pending !== null}
-                  onClick={() => go({ templateId: t.id }, t.id)}
+                  onClick={() => go({ templateId: tpl.id }, tpl.id)}
                 />
               ))}
             </div>

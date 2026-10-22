@@ -9,6 +9,8 @@ import { updateProfileAction } from "@/server/actions/profile";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Field, Input, Select, Textarea } from "@/components/ui/input";
+import { fmt, translateMessage } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 
 const CM_PER_IN = 2.54;
 
@@ -22,6 +24,7 @@ export function ProfileForm({
   heightUnit: HeightUnit;
 }) {
   const router = useRouter();
+  const tr = useT();
   const [pending, start] = useTransition();
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [v, setV] = useState({
@@ -52,7 +55,7 @@ export function ProfileForm({
     const parsed = profileSchema.safeParse(input);
     if (!parsed.success) {
       const errs: Record<string, string> = {};
-      for (const i of parsed.error.issues) errs[String(i.path[0])] ??= i.message;
+      for (const i of parsed.error.issues) errs[String(i.path[0])] ??= translateMessage(tr, i.message);
       setErrors(errs);
       return;
     }
@@ -60,7 +63,7 @@ export function ProfileForm({
     start(async () => {
       const res = await updateProfileAction(parsed.data);
       if (!res.ok) return void toast.error(res.error);
-      toast.success("Profil gespeichert");
+      toast.success(tr.profile.saved);
       router.refresh();
     });
   }
@@ -68,44 +71,44 @@ export function ProfileForm({
   return (
     <form onSubmit={submit} noValidate>
       <Card className="grid gap-4 p-4 sm:grid-cols-2 sm:p-5">
-        <Field label="Name" htmlFor="p-name">
+        <Field label={tr.common.name} htmlFor="p-name">
           <Input id="p-name" value={v.name} onChange={(e) => set("name", e.target.value)} maxLength={60} autoComplete="given-name" />
         </Field>
-        <Field label="Geburtsdatum (optional)" htmlFor="p-birth" error={errors.birthDate}>
+        <Field label={tr.profile.birthDate} htmlFor="p-birth" error={errors.birthDate}>
           <Input id="p-birth" type="date" value={v.birthDate} onChange={(e) => set("birthDate", e.target.value)} />
         </Field>
-        <Field label="Geschlecht (optional)" htmlFor="p-sex">
+        <Field label={tr.profile.sex} htmlFor="p-sex">
           <Select id="p-sex" value={v.sex} onChange={(e) => set("sex", e.target.value)}>
-            <option value="">Keine Angabe</option>
-            <option value="female">Weiblich</option>
-            <option value="male">Männlich</option>
-            <option value="diverse">Divers</option>
+            <option value="">{tr.profile.noAnswer}</option>
+            <option value="female">{tr.profile.female}</option>
+            <option value="male">{tr.profile.male}</option>
+            <option value="diverse">{tr.profile.diverse}</option>
           </Select>
         </Field>
-        <Field label={`Körpergröße (${heightUnit === "cm" ? "cm" : "Zoll"})`} htmlFor="p-height" error={errors.heightCm}>
+        <Field label={fmt(tr.profile.height, { unit: heightUnit === "cm" ? "cm" : tr.profile.inches })} htmlFor="p-height" error={errors.heightCm}>
           <Input id="p-height" inputMode="decimal" value={v.height} onChange={(e) => set("height", e.target.value)} />
         </Field>
-        <Field label={`Zielgewicht (${weightUnit}, optional)`} htmlFor="p-target" error={errors.targetWeightKg}>
+        <Field label={fmt(tr.profile.targetWeight, { unit: weightUnit })} htmlFor="p-target" error={errors.targetWeightKg}>
           <Input id="p-target" inputMode="decimal" value={v.target} onChange={(e) => set("target", e.target.value)} />
         </Field>
-        <Field label="Trainingsniveau (optional)" htmlFor="p-level">
+        <Field label={tr.profile.level} htmlFor="p-level">
           <Select id="p-level" value={v.trainingLevel} onChange={(e) => set("trainingLevel", e.target.value)}>
-            <option value="">Keine Angabe</option>
-            <option value="beginner">Einsteiger</option>
-            <option value="intermediate">Fortgeschritten</option>
-            <option value="advanced">Erfahren</option>
+            <option value="">{tr.profile.noAnswer}</option>
+            <option value="beginner">{tr.profile.beginner}</option>
+            <option value="intermediate">{tr.profile.intermediate}</option>
+            <option value="advanced">{tr.profile.advanced}</option>
           </Select>
         </Field>
-        <Field label="Trainingsziele (optional)" htmlFor="p-goals" className="sm:col-span-2">
-          <Textarea id="p-goals" value={v.goals} onChange={(e) => set("goals", e.target.value)} rows={3} maxLength={1000} placeholder="z. B. 100 kg Bankdrücken, 3× pro Woche trainieren" />
+        <Field label={tr.profile.goals} htmlFor="p-goals" className="sm:col-span-2">
+          <Textarea id="p-goals" value={v.goals} onChange={(e) => set("goals", e.target.value)} rows={3} maxLength={1000} placeholder={tr.profile.goalsPlaceholder} />
         </Field>
         <div className="flex justify-end sm:col-span-2">
           <Button type="submit" variant="primary" loading={pending}>
-            Speichern
+            {tr.common.save}
           </Button>
         </div>
       </Card>
-      <p className="mt-2 px-1 text-xs text-subtle">Alle Angaben sind optional. Das aktuelle Körpergewicht wird im Tab „Körpergewicht“ gepflegt.</p>
+      <p className="mt-2 px-1 text-xs text-subtle">{tr.profile.allOptional}</p>
     </form>
   );
 }

@@ -11,19 +11,21 @@ import { Dropdown, DropdownContent, DropdownItem, DropdownSeparator, DropdownTri
 import { Textarea } from "@/components/ui/input";
 import { deleteExerciseAction, resetBuiltinExerciseAction, setArchivedAction, setExerciseNotesAction } from "@/server/actions/exercises";
 import { FavoriteButton } from "./favorite-button";
+import { useT } from "@/components/i18n-provider";
 
 export function ExerciseActions({ id, favorite, archived, isCustom, isModified }: { id: string; favorite: boolean; archived: boolean; isCustom: boolean; isModified: boolean }) {
   const router = useRouter();
+  const t = useT();
   const [confirm, setConfirm] = useState(false);
   return (
     <div className="flex items-center gap-1.5">
       <FavoriteButton id={id} favorite={favorite} className="border border-border" />
       <Link href={`/exercises/${encodeURIComponent(id)}/edit`} className={buttonClasses("secondary", "md")}>
-        <Pencil className="size-4" /> Bearbeiten
+        <Pencil className="size-4" /> {t.common.edit}
       </Link>
       <Dropdown>
         <DropdownTrigger asChild>
-          <Button size="icon" variant="ghost" aria-label="Weitere Aktionen">
+          <Button size="icon" variant="ghost" aria-label={t.exercises.moreActions}>
             <Ellipsis className="size-4" />
           </Button>
         </DropdownTrigger>
@@ -34,11 +36,11 @@ export function ExerciseActions({ id, favorite, archived, isCustom, isModified }
               onSelect={async () => {
                 const res = await resetBuiltinExerciseAction(id);
                 if (!res.ok) return void toast.error(res.error);
-                toast.success("Standardwerte wiederhergestellt");
+                toast.success(t.exercises.defaultsRestored);
                 router.refresh();
               }}
             >
-              Auf Standard zurücksetzen
+              {t.exercises.resetToDefault}
             </DropdownItem>
           ) : null}
           <DropdownItem
@@ -46,17 +48,17 @@ export function ExerciseActions({ id, favorite, archived, isCustom, isModified }
             onSelect={async () => {
               const res = await setArchivedAction(id, !archived);
               if (!res.ok) return void toast.error(res.error);
-              toast.success(archived ? "Übung wiederhergestellt" : "Übung archiviert – sie bleibt im Verlauf erhalten");
+              toast.success(archived ? t.exercises.restored : t.exercises.archivedToast);
               router.refresh();
             }}
           >
-            {archived ? "Aus Archiv holen" : "Archivieren"}
+            {archived ? t.exercises.unarchive : t.exercises.archive}
           </DropdownItem>
           {isCustom ? (
             <>
               <DropdownSeparator />
               <DropdownItem icon={Trash2} destructive onSelect={() => setConfirm(true)}>
-                Löschen
+                {t.common.delete}
               </DropdownItem>
             </>
           ) : null}
@@ -66,17 +68,17 @@ export function ExerciseActions({ id, favorite, archived, isCustom, isModified }
         open={confirm}
         onOpenChange={setConfirm}
         destructive
-        title="Übung löschen?"
-        description="Wurde die Übung bereits verwendet (Training oder Vorlage), wird sie stattdessen archiviert – deine Trainingsdaten bleiben immer erhalten."
-        confirmLabel="Löschen"
+        title={t.exercises.deleteTitle}
+        description={t.exercises.deleteText}
+        confirmLabel={t.common.delete}
         onConfirm={async () => {
           const res = await deleteExerciseAction(id);
           if (!res.ok) return void toast.error(res.error);
           if (res.data.archived) {
-            toast("Übung wird verwendet und wurde archiviert.");
+            toast(t.exercises.usedArchived);
             router.refresh();
           } else {
-            toast.success("Übung gelöscht");
+            toast.success(t.exercises.deleted);
             router.replace("/exercises");
             router.refresh();
           }
@@ -89,10 +91,11 @@ export function ExerciseActions({ id, favorite, archived, isCustom, isModified }
 export function ExerciseNotes({ id, notes }: { id: string; notes: string | null }) {
   const [value, setValue] = useState(notes ?? "");
   const [saved, setSaved] = useState(notes ?? "");
+  const t = useT();
   const dirty = value.trim() !== saved.trim();
   return (
     <div>
-      <Textarea value={value} onChange={(e) => setValue(e.target.value)} rows={3} placeholder="Eigene Notizen, z. B. Sitzeinstellung, Griff, Technik-Cues …" aria-label="Eigene Notizen" maxLength={5000} />
+      <Textarea value={value} onChange={(e) => setValue(e.target.value)} rows={3} placeholder={t.exercises.notesPlaceholder} aria-label={t.exercises.notesLabel} maxLength={5000} />
       {dirty ? (
         <div className="mt-2 flex justify-end">
           <Button
@@ -102,10 +105,10 @@ export function ExerciseNotes({ id, notes }: { id: string; notes: string | null 
               const res = await setExerciseNotesAction(id, value);
               if (!res.ok) return void toast.error(res.error);
               setSaved(value);
-              toast.success("Notiz gespeichert");
+              toast.success(t.exercises.noteSaved);
             }}
           >
-            Notiz speichern
+            {t.exercises.saveNote}
           </Button>
         </div>
       ) : null}

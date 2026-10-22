@@ -29,7 +29,7 @@ describe("templates", () => {
 
   it("validates input", async () => {
     await expect(saveTemplate(db, null, { name: "", items: [] })).rejects.toThrow();
-    await expect(saveTemplate(db, null, { name: "X", items: [{ exerciseId: "nope", targetSets: 3 }] })).rejects.toThrow(/Unbekannte/);
+    await expect(saveTemplate(db, null, { name: "X", items: [{ exerciseId: "nope", targetSets: 3 }] })).rejects.toThrow(/templates\.unknownExercise/);
     await expect(saveTemplate(db, null, { name: "X", items: [{ exerciseId: "back-squat", targetSets: 3, repMin: 10, repMax: 5 }] })).rejects.toThrow();
   });
 

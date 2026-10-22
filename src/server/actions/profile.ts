@@ -11,6 +11,8 @@ import { createBackup, readBackup } from "@/server/services/backups";
 import { importData, validateExport } from "@/server/services/data-transfer";
 import { getToday } from "@/server/queries/settings";
 import { run, UserError } from "./_util";
+import { LOCALES, fmt, msg, translateMessage } from "@/lib/i18n";
+import { getT } from "@/server/i18n";
 
 export async function updateProfileAction(input: ProfileInput) {
   return run(async () => {
@@ -28,11 +30,20 @@ export async function updateSettingsAction(input: SettingsInput) {
   });
 }
 
+/** Switches the UI language (stored in the settings, applies to every device). */
+export async function setLocaleAction(locale: string) {
+  return run(async () => {
+    const value = z.enum(LOCALES).parse(locale);
+    await db.update(s.settings).set({ locale: value, updatedAt: new Date() }).where(eq(s.settings.id, 1));
+    revalidatePath("/", "layout");
+  });
+}
+
 /** Adds or replaces the entry of a day (one entry per day). Old entries are never changed implicitly. */
 export async function saveBodyweightAction(input: { date: string; weightKg: number; note?: string | null }) {
   return run(async () => {
     const data = bodyweightSchema.parse(input);
-    if (data.date > (await getToday())) throw new UserError("Einträge in der Zukunft sind nicht möglich.");
+    if (data.date > (await getToday())) throw new UserError(msg("profile.futureEntry"));
     await db
       .insert(s.bodyWeightEntries)
       .values(data)
@@ -44,7 +55,7 @@ export async function saveBodyweightAction(input: { date: string; weightKg: numb
 export async function deleteBodyweightAction(id: string) {
   return run(async () => {
     const [row] = await db.delete(s.bodyWeightEntries).where(eq(s.bodyWeightEntries.id, z.uuid().parse(id))).returning();
-    if (!row) throw new UserError("Eintrag nicht gefunden");
+    if (!row) throw new UserError(msg("profile.entryNotFound"));
     revalidatePath("/", "layout");
     return { date: row.date, weightKg: row.weightKg, note: row.note };
   });
@@ -58,7 +69,7 @@ export async function createBackupAction() {
       return { name: b.name };
     } catch (err) {
       console.error("[backup] failed:", err);
-      throw new UserError(`Backup konnte nicht geschrieben werden (${env.BACKUP_DIR} beschreibbar?).`);
+      throw new UserError(fmt((await getT()).profile.backupWriteFailed, { dir: env.BACKUP_DIR }));
     }
   });
 }
@@ -66,15 +77,18 @@ export async function createBackupAction() {
 /** Restores a backup from BACKUP_DIR (creates a safety backup first). */
 export async function restoreBackupAction(name: string, confirm: string) {
   return run(async () => {
-    if (confirm !== "ERSETZEN") throw new UserError("Bitte zur Bestätigung ERSETZEN eingeben.");
+    if (confirm !== "ERSETZEN") throw new UserError(msg("profile.confirmReplace"));
     let raw: unknown;
     try {
       raw = await readBackup(env.BACKUP_DIR, name);
     } catch {
-      throw new UserError("Backup-Datei nicht lesbar.");
+      throw new UserError(msg("profile.backupUnreadable"));
     }
     const v = validateExport(raw);
-    if (!v.ok) throw new UserError(`Backup ungültig: ${v.errors[0]}`);
+    if (!v.ok) {
+      const t = await getT();
+      throw new UserError(fmt(t.profile.backupInvalid, { error: translateMessage(t, v.errors[0]) }));
+    }
     await createBackup(db, env.BACKUP_DIR, { keep: env.BACKUP_KEEP, label: "vor-import" });
     await importData(db, v.data);
     revalidatePath("/", "layout");

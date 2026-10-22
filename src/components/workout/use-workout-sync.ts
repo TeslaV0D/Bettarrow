@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { toSyncPayload, type LoggerState } from "@/lib/workout-reducer";
 import type { SyncResult } from "@/lib/workout-schema";
+import { uuid } from "@/lib/uuid";
 
 export type SyncStatus = "saved" | "pending" | "saving" | "offline" | "conflict" | "error";
 
@@ -13,7 +14,7 @@ export function getDeviceId(): string {
   try {
     let id = localStorage.getItem(DEVICE_KEY);
     if (!id) {
-      id = crypto.randomUUID();
+      id = uuid();
       localStorage.setItem(DEVICE_KEY, id);
     }
     return id;

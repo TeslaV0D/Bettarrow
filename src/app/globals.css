@@ -133,6 +133,16 @@
   .safe-bottom {
     padding-bottom: env(safe-area-inset-bottom);
   }
+  /* Opaque strip behind the iOS status bar / notch (viewport-fit=cover + black-translucent). */
+  .safe-top-cover {
+    position: fixed;
+    inset-inline: 0;
+    top: 0;
+    z-index: 45;
+    height: env(safe-area-inset-top);
+    background: var(--bg);
+    pointer-events: none;
+  }
   .skeleton {
     background: linear-gradient(90deg, var(--surface-2) 25%, var(--surface-3) 37%, var(--surface-2) 63%);
     background-size: 400% 100%;

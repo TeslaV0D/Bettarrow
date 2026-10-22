@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { ExerciseSearchBar } from "./exercise-filters";
 import { exerciseSubtitle, useExerciseSearch, type Reference } from "./use-exercise-search";
+import { useT } from "@/components/i18n-provider";
 
 /**
  * Exercise picker used in the live workout and the template editor.
@@ -20,8 +21,8 @@ export function ExercisePicker({
   reference,
   recentIds = [],
   multiple = true,
-  title = "Übungen hinzufügen",
-  confirmLabel = "Hinzufügen",
+  title,
+  confirmLabel,
   onConfirm,
 }: {
   open: boolean;
@@ -35,6 +36,7 @@ export function ExercisePicker({
   onConfirm: (ids: string[]) => void;
 }) {
   const { filter, update, reset, results, maps } = useExerciseSearch(catalog, reference);
+  const t = useT();
   const [selected, setSelected] = useState<string[]>([]);
   const [wasOpen, setWasOpen] = useState(open);
   if (open !== wasOpen) {
@@ -97,7 +99,7 @@ export function ExercisePicker({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        title={title}
+        title={title ?? t.picker.title}
         size="lg"
         className="sm:h-[min(760px,88dvh)]"
         onOpenAutoFocus={(e) => e.preventDefault()}
@@ -105,7 +107,7 @@ export function ExercisePicker({
           multiple ? (
             <>
               <Button variant="ghost" onClick={() => onOpenChange(false)}>
-                Abbrechen
+                {t.common.cancel}
               </Button>
               <Button
                 variant="primary"
@@ -115,7 +117,7 @@ export function ExercisePicker({
                   onOpenChange(false);
                 }}
               >
-                {confirmLabel}
+                {confirmLabel ?? t.picker.confirm}
                 {selected.length ? ` (${selected.length})` : ""}
               </Button>
             </>
@@ -127,13 +129,13 @@ export function ExercisePicker({
         </div>
         {recent.length ? (
           <section className="mb-3">
-            <h3 className="mb-1 px-3 text-xs font-medium uppercase tracking-wider text-subtle">Zuletzt verwendet</h3>
+            <h3 className="mb-1 px-3 text-xs font-medium uppercase tracking-wider text-subtle">{t.picker.recent}</h3>
             <ul>{recent.map((e) => row(e, <Clock className="size-3.5 shrink-0 text-subtle" aria-hidden />))}</ul>
           </section>
         ) : null}
         <section>
-          {recent.length ? <h3 className="mb-1 px-3 text-xs font-medium uppercase tracking-wider text-subtle">Alle Übungen</h3> : null}
-          {results.length === 0 ? <p className="px-3 py-8 text-center text-sm text-muted">Keine Übung gefunden.</p> : null}
+          {recent.length ? <h3 className="mb-1 px-3 text-xs font-medium uppercase tracking-wider text-subtle">{t.picker.all}</h3> : null}
+          {results.length === 0 ? <p className="px-3 py-8 text-center text-sm text-muted">{t.picker.none}</p> : null}
           <ul>{results.map((e) => row(e, e.isFavorite ? <Star className="size-3.5 shrink-0 fill-warning text-warning" aria-hidden /> : undefined))}</ul>
         </section>
       </DialogContent>

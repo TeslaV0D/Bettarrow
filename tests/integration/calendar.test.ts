@@ -114,6 +114,6 @@ describe("calendar ↔ workouts", () => {
 
   it("a planned rest day cannot be started", async () => {
     const id = await planEntry(db, { date: "2026-10-20", kind: "rest" });
-    await expect(startWorkout(db, { plannedEntryId: id }, { timezone: "UTC" })).rejects.toThrow(/Ruhetag/);
+    await expect(startWorkout(db, { plannedEntryId: id }, { timezone: "UTC" })).rejects.toThrow(/workout\.restCannotStart/);
   });
 });

@@ -9,18 +9,21 @@ import { WorkoutLogger } from "@/components/workout/workout-logger";
 import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
 import { StartWorkoutButton } from "@/components/shell/start-workout-button";
+import { getT } from "@/server/i18n";
 
-export const metadata: Metadata = { title: "Training" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT()).history.workout };
+}
 
 export default async function WorkoutPage() {
-  const activeId = await getActiveWorkoutId(db);
+  const [t, activeId] = await Promise.all([getT(), getActiveWorkoutId(db)]);
   if (!activeId) {
     return (
       <Card className="mx-auto mt-10 max-w-md">
         <EmptyState
           icon={Dumbbell}
-          title="Kein laufendes Training"
-          description="Starte ein Training aus einer Vorlage oder frei."
+          title={t.history.noActive}
+          description={t.history.noActiveText}
           action={<StartWorkoutButton />}
         />
       </Card>

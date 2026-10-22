@@ -3,6 +3,8 @@ import type { Db, DbOrTx } from "@/server/db/types";
 import * as s from "@/server/db/schema";
 import { expandRules, parseVirtualEntryId, type CalendarEntry, type PlanKind, type PlanStatus, type PlanRuleLike } from "@/lib/calendar";
 import type { YMD } from "@/lib/dates";
+import { msg } from "@/lib/i18n";
+import { UserError } from "@/server/errors";
 
 /**
  * Converts a virtual rule occurrence id (`rule:<ruleId>:<date>`) into a real planned entry and
@@ -13,7 +15,7 @@ export async function materializeEntry(tx: DbOrTx, id: string): Promise<string> 
   const virtual = parseVirtualEntryId(id);
   if (!virtual) return id;
   const [rule] = await tx.select().from(s.planRules).where(eq(s.planRules.id, virtual.ruleId)).limit(1);
-  if (!rule) throw new Error("Wiederholung nicht gefunden");
+  if (!rule) throw new UserError(msg("calendar.ruleNotFound"));
   await tx
     .insert(s.plannedEntries)
     .values({
@@ -112,13 +114,21 @@ export async function getCalendarRange(db: DbOrTx, from: YMD, to: YMD): Promise<
   return { entries: all, workouts: workouts.map((w) => ({ ...w, status: w.status as "active" | "completed" })) };
 }
 
+/** Titles used when an entry has neither a title nor a template (callers pass them in the UI language). */
+export interface DefaultTitles {
+  workout: string;
+  rest: string;
+}
+const GERMAN_TITLES: DefaultTitles = { workout: "Training", rest: "Ruhetag" };
+
 export async function planEntry(
   db: Db,
   input: { date: YMD; kind: PlanKind; templateId?: string | null; title?: string | null; notes?: string | null },
+  defaults: DefaultTitles = GERMAN_TITLES,
 ): Promise<string> {
   let title = input.title?.trim() || null;
   if (input.kind === "rest") {
-    title = title ?? "Ruhetag";
+    title = title ?? defaults.rest;
     // Only one active rest day entry per date.
     const [existing] = await db
       .select({ id: s.plannedEntries.id })
@@ -136,7 +146,7 @@ export async function planEntry(
       date: input.date,
       kind: input.kind,
       templateId: input.kind === "workout" ? (input.templateId ?? null) : null,
-      title: title ?? "Training",
+      title: title ?? defaults.workout,
       notes: input.notes ?? null,
       status: "planned",
     })
@@ -165,8 +175,8 @@ export async function moveEntry(db: Db, id: string, date: YMD): Promise<string> 
   return db.transaction(async (tx) => {
     const realId = await materializeEntry(tx, id);
     const [e] = await tx.select().from(s.plannedEntries).where(eq(s.plannedEntries.id, realId)).limit(1);
-    if (!e) throw new Error("Eintrag nicht gefunden");
-    if (e.status === "completed") throw new Error("Abgeschlossene Einheiten können nicht verschoben werden");
+    if (!e) throw new UserError(msg("calendar.entryNotFound"));
+    if (e.status === "completed") throw new UserError(msg("calendar.completedCannotMove"));
     const original = e.movedFrom ?? e.date;
     await tx
       .update(s.plannedEntries)
@@ -180,8 +190,8 @@ export async function setEntryStatus(db: Db, id: string, status: Extract<PlanSta
   return db.transaction(async (tx) => {
     const realId = await materializeEntry(tx, id);
     const [e] = await tx.select({ status: s.plannedEntries.status }).from(s.plannedEntries).where(eq(s.plannedEntries.id, realId)).limit(1);
-    if (!e) throw new Error("Eintrag nicht gefunden");
-    if (e.status === "completed" && status !== "planned") throw new Error("Abgeschlossene Einheiten können nicht geändert werden");
+    if (!e) throw new UserError(msg("calendar.entryNotFound"));
+    if (e.status === "completed" && status !== "planned") throw new UserError(msg("calendar.completedCannotChange"));
     await tx.update(s.plannedEntries).set({ status, updatedAt: new Date() }).where(eq(s.plannedEntries.id, realId));
     return { id: realId, previous: e.status as PlanStatus };
   });
@@ -205,6 +215,7 @@ export async function listRules(db: DbOrTx): Promise<PlanRule[]> {
 export async function createRule(
   db: Db,
   input: { kind: PlanKind; templateId?: string | null; title?: string | null; weekdays: number[]; startDate: YMD; endDate?: YMD | null },
+  defaults: DefaultTitles = GERMAN_TITLES,
 ): Promise<string> {
   let title = input.title?.trim() || null;
   if (!title && input.kind === "workout" && input.templateId) {
@@ -216,7 +227,7 @@ export async function createRule(
     .values({
       kind: input.kind,
       templateId: input.kind === "workout" ? (input.templateId ?? null) : null,
-      title: title ?? (input.kind === "rest" ? "Ruhetag" : "Training"),
+      title: title ?? (input.kind === "rest" ? defaults.rest : defaults.workout),
       weekdays: [...new Set(input.weekdays)].sort(),
       startDate: input.startDate,
       endDate: input.endDate ?? null,

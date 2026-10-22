@@ -5,8 +5,11 @@ import { getCatalog, getRecentExerciseIds, getReferenceData } from "@/server/que
 import { getSettings } from "@/server/queries/settings";
 import { getLoggerState, loggerSettings } from "@/server/queries/logger";
 import { WorkoutLogger } from "@/components/workout/workout-logger";
+import { getT } from "@/server/i18n";
 
-export const metadata: Metadata = { title: "Training bearbeiten" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT()).history.editTitle };
+}
 
 export default async function EditWorkoutPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;

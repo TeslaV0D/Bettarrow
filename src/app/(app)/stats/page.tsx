@@ -5,7 +5,7 @@ import { db } from "@/server/db";
 import { getPeriodStats } from "@/server/services/stats";
 import { getCatalog, getReferenceData } from "@/server/queries/exercises";
 import { getSettings } from "@/server/queries/settings";
-import { PERIOD_LABELS, periodRange, startOfWeek, todayIn, type PeriodKey } from "@/lib/dates";
+import { PERIOD_KEYS, periodRange, startOfWeek, todayIn, type PeriodKey } from "@/lib/dates";
 import { formatDay, formatDuration, formatNumber, formatVolume, type WeightUnit } from "@/lib/format";
 import { Card, CardHeader } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
@@ -14,16 +14,18 @@ import { TrendChart } from "@/components/stats/trend-chart";
 import { MuscleTable } from "@/components/stats/muscle-table";
 import { DayHeatmap } from "@/components/stats/day-heatmap";
 import { Sparkbars } from "@/components/charts/sparkline";
+import { fmt, plural } from "@/lib/i18n";
+import { getT } from "@/server/i18n";
 
-export const metadata: Metadata = { title: "Statistik" };
-
-const KEYS = Object.keys(PERIOD_LABELS) as PeriodKey[];
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT()).stats.title };
+}
 
 export default async function StatsPage({ searchParams }: { searchParams: Promise<{ period?: string; from?: string; to?: string }> }) {
   const sp = await searchParams;
-  const settings = await getSettings();
+  const [settings, t] = await Promise.all([getSettings(), getT()]);
   const today = todayIn(settings.timezone);
-  const key: PeriodKey = KEYS.includes(sp.period as PeriodKey) ? (sp.period as PeriodKey) : "last_90";
+  const key: PeriodKey = PERIOD_KEYS.includes(sp.period as PeriodKey) ? (sp.period as PeriodKey) : "last_90";
   const range = periodRange(key, today, settings.weekStart, { from: sp.from, to: sp.to });
   const unit = settings.weightUnit as WeightUnit;
   const [stats, catalog, reference] = await Promise.all([
@@ -37,7 +39,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
   ]);
   const labels = Object.fromEntries(reference.muscles.map((m) => [m.id, m.name]));
   const exName = new Map(catalog.map((e) => [e.id, e.name]));
-  const t = stats.totals;
+  const totals = stats.totals;
   const currentKey = stats.bucketUnit === "week" ? startOfWeek(today, settings.weekStart) : today.slice(0, 8) + "01";
   const trendMax = Math.max(1, ...stats.groupTrend.flatMap((g) => g.values));
 
@@ -45,7 +47,7 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
     <div className="space-y-4">
       <header className="mb-2 flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">Statistik</h1>
+          <h1 className="text-2xl font-semibold tracking-tight sm:text-[28px]">{t.stats.title}</h1>
           <p className="mt-1 text-sm text-muted">
             {formatDay(stats.from, "medium")} – {formatDay(stats.to, "medium")}
           </p>
@@ -53,19 +55,19 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
         <PeriodPicker value={key} from={range.from ?? stats.from} to={range.to ?? stats.to} />
       </header>
 
-      {t.sessions === 0 ? (
+      {totals.sessions === 0 ? (
         <Card>
-          <EmptyState icon={ChartColumn} title="Keine Trainings im Zeitraum" description="Wähle einen anderen Zeitraum oder schließe ein Training ab." />
+          <EmptyState icon={ChartColumn} title={t.stats.emptyTitle} description={t.stats.emptyText} />
         </Card>
       ) : (
         <>
           <dl className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-6">
-            <Kpi label="Trainings" value={String(t.sessions)} />
-            <Kpi label="Trainingstage" value={String(t.trainingDays)} />
-            <Kpi label="Arbeitssätze" value={String(t.workingSets)} />
-            <Kpi label="Volumen" value={formatVolume(t.volumeKg, unit)} hint={t.volumeIncomplete ? "teilweise ohne Last" : undefined} />
-            <Kpi label="Ø Dauer" value={formatDuration(t.avgDurationSeconds)} />
-            <Kpi label="Ø Sätze / Training" value={formatNumber(t.avgSetsPerSession, 1)} />
+            <Kpi label={t.dashboard.sessions} value={String(totals.sessions)} />
+            <Kpi label={t.stats.trainingDays} value={String(totals.trainingDays)} />
+            <Kpi label={t.dashboard.workingSets} value={String(totals.workingSets)} />
+            <Kpi label={t.dashboard.volume} value={formatVolume(totals.volumeKg, unit)} hint={totals.volumeIncomplete ? t.stats.partlyNoLoad : undefined} />
+            <Kpi label={t.stats.avgDuration} value={formatDuration(totals.avgDurationSeconds)} />
+            <Kpi label={t.stats.avgSets} value={formatNumber(totals.avgSetsPerSession, 1)} />
           </dl>
 
           <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_380px]">
@@ -73,28 +75,28 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
               <TrendChart buckets={stats.buckets} unit={unit} bucketUnit={stats.bucketUnit} currentKey={currentKey} />
             </Card>
             <Card className="p-4 sm:p-5">
-              <h2 className="text-[15px] font-semibold">Kontinuität</h2>
+              <h2 className="text-[15px] font-semibold">{t.stats.consistency}</h2>
               <dl className="mt-3 grid grid-cols-3 gap-2 text-center">
-                <Mini label="Aktive Wochen" value={`${stats.consistency.activeWeeks}/${stats.consistency.weeks}`} />
-                <Mini label="Serie (Wochen)" value={String(stats.consistency.currentStreak)} />
-                <Mini label="Längste Serie" value={String(stats.consistency.longestStreak)} />
+                <Mini label={t.stats.activeWeeks} value={`${stats.consistency.activeWeeks}/${stats.consistency.weeks}`} />
+                <Mini label={t.stats.streak} value={String(stats.consistency.currentStreak)} />
+                <Mini label={t.stats.longestStreak} value={String(stats.consistency.longestStreak)} />
               </dl>
-              <p className="mt-3 text-sm text-muted">Ø {formatNumber(stats.consistency.avgSessionsPerWeek, 1)} Trainings pro Woche</p>
+              <p className="mt-3 text-sm text-muted">{fmt(t.stats.avgPerWeek, { value: formatNumber(stats.consistency.avgSessionsPerWeek, 1) })}</p>
               <div className="mt-3">
-                <DayHeatmap days={stats.trainingDays} from={stats.from} to={stats.to} weekStart={settings.weekStart} />
+                <DayHeatmap days={stats.trainingDays} from={stats.from} to={stats.to} weekStart={settings.weekStart} t={t} />
               </div>
             </Card>
           </div>
 
           <div className="grid gap-4 xl:grid-cols-2">
             <Card className="p-4 sm:p-5">
-              <h2 className="mb-1 text-[15px] font-semibold">Muskelgruppen</h2>
-              <p className="mb-4 text-sm text-muted">Belastung und Anteil im Zeitraum</p>
+              <h2 className="mb-1 text-[15px] font-semibold">{t.stats.muscleGroups}</h2>
+              <p className="mb-4 text-sm text-muted">{t.stats.muscleGroupsHint}</p>
               <MuscleTable rows={stats.muscles} labels={labels} unit={unit} secondaryWeight={settings.secondaryMuscleWeight} />
             </Card>
             <Card className="p-4 sm:p-5">
-              <h2 className="mb-1 text-[15px] font-semibold">Entwicklung nach Muskelgruppe</h2>
-              <p className="mb-4 text-sm text-muted">Gewichtete Sätze {stats.bucketUnit === "week" ? "pro Woche" : "pro Monat"} · gleiche Skala</p>
+              <h2 className="mb-1 text-[15px] font-semibold">{t.stats.groupTrend}</h2>
+              <p className="mb-4 text-sm text-muted">{stats.bucketUnit === "week" ? t.stats.groupTrendHintWeek : t.stats.groupTrendHintMonth}</p>
               <ul className="space-y-2.5">
                 {stats.groupTrend.map((g) => (
                   <li key={g.groupId} className="grid grid-cols-[7rem_1fr_3rem] items-center gap-3 text-sm">
@@ -109,14 +111,14 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
 
           <div className="grid gap-4 xl:grid-cols-2">
             <Card>
-              <CardHeader title="Meisttrainierte Übungen" />
+              <CardHeader title={t.stats.topExercises} />
               <ul className="mt-2 divide-y divide-border border-t border-border">
                 {stats.topExercises.map((e) => (
                   <li key={e.exerciseId}>
                     <Link href={`/exercises/${e.exerciseId}`} className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm hover:bg-surface-2/60 sm:px-5">
                       <span className="truncate font-medium">{exName.get(e.exerciseId) ?? e.exerciseId}</span>
                       <span className="tabular shrink-0 text-muted">
-                        {e.workingSets} Sätze · {e.sessions}× {e.volumeKg ? `· ${formatVolume(e.volumeKg, unit)}` : ""}
+                        {plural(t.units.sets, e.workingSets)} · {e.sessions}× {e.volumeKg ? `· ${formatVolume(e.volumeKg, unit)}` : ""}
                       </span>
                     </Link>
                   </li>
@@ -125,19 +127,14 @@ export default async function StatsPage({ searchParams }: { searchParams: Promis
             </Card>
             <Card className="p-4 sm:p-5">
               <h2 className="flex items-center gap-2 text-[15px] font-semibold">
-                <Info className="size-4 text-muted" /> So wird gerechnet
+                <Info className="size-4 text-muted" /> {t.stats.howCalculated}
               </h2>
               <ul className="mt-3 list-disc space-y-1.5 pl-5 text-sm text-muted">
-                <li>Arbeitssätze = abgehakte Sätze außer Aufwärmsätzen (Dropsets und Sätze bis zum Versagen zählen).</li>
-                <li>Volumen = effektive Last × Wiederholungen je Arbeitssatz. Zeit-Übungen und Übungen ohne Last zählen nicht zum Volumen.</li>
-                <li>
-                  Körpergewichtsübungen nutzen das beim Training gespeicherte Körpergewicht × Faktor{settings.bodyweightInVolume ? "" : " (aktuell vom Volumen ausgeschlossen)"}.
-                </li>
-                <li>
-                  Muskelgruppen: Ein Satz zählt voll für den primären Muskel und mit Faktor {formatNumber(settings.secondaryMuscleWeight, 2)} für jeden sekundären (einstellbar im Profil).
-                  Direkte und indirekte Anteile werden getrennt angezeigt.
-                </li>
-                <li>Trainings zählen für den Kalendertag, an dem sie gestartet wurden ({settings.timezone}).</li>
+                <li>{t.stats.calc1}</li>
+                <li>{t.stats.calc2}</li>
+                <li>{settings.bodyweightInVolume ? t.stats.calc3 : t.stats.calc3Excluded}</li>
+                <li>{fmt(t.stats.calc4, { factor: formatNumber(settings.secondaryMuscleWeight, 2) })}</li>
+                <li>{fmt(t.stats.calc5, { timezone: settings.timezone })}</li>
               </ul>
             </Card>
           </div>

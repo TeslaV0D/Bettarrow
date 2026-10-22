@@ -11,15 +11,19 @@ import { Card, CardBody, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { WorkoutActions } from "@/components/history/workout-actions";
 import { formatClock, formatDay, formatDuration, formatNumber, formatTime, formatVolume, formatWeight, type WeightUnit } from "@/lib/format";
-import { PR_LABELS, SET_TYPE_LABELS, SET_TYPE_SHORT, weightedSets } from "@/lib/training";
+import { weightedSets } from "@/lib/training";
+import { fmt, plural, type Dict } from "@/lib/i18n";
+import { getT } from "@/server/i18n";
 
-export const metadata: Metadata = { title: "Training" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT()).history.workout };
+}
 
 export default async function WorkoutDetailPage({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ finished?: string }> }) {
   const { id } = await params;
   const { finished } = await searchParams;
   if (!z.uuid().safeParse(id).success) notFound();
-  const [summary, catalog, reference, settings] = await Promise.all([getWorkoutSummary(id), getCatalog(), getReferenceData(), getSettings()]);
+  const [t, summary, catalog, reference, settings] = await Promise.all([getT(), getWorkoutSummary(id), getCatalog(), getReferenceData(), getSettings()]);
   if (!summary) notFound();
   const { workout: w, totals, prs, muscles, perExercise } = summary;
   if (w.status === "active") redirect("/workout");
@@ -34,23 +38,23 @@ export default async function WorkoutDetailPage({ params, searchParams }: { para
         <div className="mb-5 flex items-center gap-3 rounded-lg border border-accent/30 bg-accent-soft px-4 py-3">
           <CheckCircle2 className="size-6 shrink-0 text-accent" aria-hidden />
           <div>
-            <p className="font-semibold text-accent">Training abgeschlossen</p>
-            <p className="text-sm text-muted">{prs.length ? `Stark – ${prs.length} neue ${prs.length === 1 ? "Bestleistung" : "Bestleistungen"}!` : "Gut gemacht. Alles ist gespeichert."}</p>
+            <p className="font-semibold text-accent">{t.history.finished}</p>
+            <p className="text-sm text-muted">{prs.length ? plural(t.history.newPrs, prs.length) : t.history.allSaved}</p>
           </div>
         </div>
       ) : null}
       <PageHeader
         title={w.name}
         subtitle={`${formatDay(w.localDate, "long")} · ${formatTime(w.startedAt, settings.timezone)}${w.endedAt ? `–${formatTime(w.endedAt, settings.timezone)}` : ""}`}
-        back={{ href: "/history", label: "Verlauf" }}
+        back={{ href: "/history", label: t.history.title }}
         actions={<WorkoutActions id={w.id} name={w.name} />}
       />
 
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-        <Kpi label="Dauer" value={formatDuration(summary.durationSeconds)} />
-        <Kpi label="Übungen" value={String(totals.exercises)} />
-        <Kpi label="Arbeitssätze" value={String(totals.workingSets)} />
-        <Kpi label="Volumen" value={formatVolume(totals.volumeKg, unit)} hint={totals.volumeIncomplete ? "unvollständig" : undefined} />
+        <Kpi label={t.history.duration} value={formatDuration(summary.durationSeconds)} />
+        <Kpi label={t.nav.exercises} value={String(totals.exercises)} />
+        <Kpi label={t.dashboard.workingSets} value={String(totals.workingSets)} />
+        <Kpi label={t.dashboard.volume} value={formatVolume(totals.volumeKg, unit)} hint={totals.volumeIncomplete ? t.history.incomplete : undefined} />
       </div>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[1fr_320px]">
@@ -67,7 +71,7 @@ export default async function WorkoutDetailPage({ params, searchParams }: { para
                       {meta?.name ?? e.exerciseId}
                     </Link>
                     <p className="text-sm text-muted">
-                      {pe.workingSets} {pe.workingSets === 1 ? "Arbeitssatz" : "Arbeitssätze"}{pe.volumeKg ? ` · ${formatVolume(pe.volumeKg, unit)}` : ""}
+                      {plural(t.units.workingSets, pe.workingSets)}{pe.volumeKg ? ` · ${formatVolume(pe.volumeKg, unit)}` : ""}
                     </p>
                   </div>
                   {prs.some((p) => p.exerciseId === e.exerciseId) ? (
@@ -80,30 +84,30 @@ export default async function WorkoutDetailPage({ params, searchParams }: { para
                 <table className="mt-2 w-full text-sm">
                   <thead className="text-left text-xs uppercase tracking-wide text-subtle">
                     <tr>
-                      <th className="w-14 px-4 py-1 font-medium">Satz</th>
-                      <th className="py-1 font-medium">Ergebnis</th>
-                      <th className="px-4 py-1 text-right font-medium">Last</th>
+                      <th className="w-14 px-4 py-1 font-medium">{t.common.set}</th>
+                      <th className="py-1 font-medium">{t.history.result}</th>
+                      <th className="px-4 py-1 text-right font-medium">{t.history.load}</th>
                     </tr>
                   </thead>
                   <tbody className="tabular">
                     {e.sets.map((st) => {
-                      const label = st.setType === "warmup" ? "W" : String(++n);
+                      const label = st.setType === "warmup" ? t.setTypesShort.warmup : String(++n);
                       const result =
                         e.tracking === "duration"
                           ? `${st.weightKg ? `${formatWeight(st.weightKg, unit)} · ` : ""}${st.durationSeconds != null ? formatClock(st.durationSeconds) : "–"}`
                           : e.loadMode === "external"
                             ? `${formatWeight(st.weightKg, unit)} × ${st.reps ?? "–"}`
                             : e.loadMode === "bodyweight_plus"
-                              ? `KG${st.weightKg ? ` + ${formatWeight(st.weightKg, unit)}` : ""} × ${st.reps ?? "–"}`
+                              ? `${t.setRow.bwShort}${st.weightKg ? ` + ${formatWeight(st.weightKg, unit)}` : ""} × ${st.reps ?? "–"}`
                               : e.loadMode === "bodyweight_minus"
-                                ? `KG${st.weightKg ? ` − ${formatWeight(st.weightKg, unit)}` : ""} × ${st.reps ?? "–"}`
-                                : `${st.reps ?? "–"} Wdh.`;
+                                ? `${t.setRow.bwShort}${st.weightKg ? ` − ${formatWeight(st.weightKg, unit)}` : ""} × ${st.reps ?? "–"}`
+                                : fmt(t.common.repsShort, { n: st.reps ?? "–" });
                       const extras = [st.rir != null ? `RIR ${formatNumber(st.rir)}` : null, st.rpe != null ? `RPE ${formatNumber(st.rpe)}` : null].filter(Boolean).join(" · ");
                       return (
                         <tr key={st.id} className="border-t border-border/60">
-                          <td className="px-4 py-2 font-semibold text-muted" title={SET_TYPE_LABELS[st.setType]}>
+                          <td className="px-4 py-2 font-semibold text-muted" title={t.setTypes[st.setType]}>
                             {label}
-                            {st.setType !== "working" && st.setType !== "warmup" ? <span className="ml-1 text-xs text-info">{SET_TYPE_SHORT[st.setType]}</span> : null}
+                            {st.setType !== "working" && st.setType !== "warmup" ? <span className="ml-1 text-xs text-info">{t.setTypesShort[st.setType]}</span> : null}
                           </td>
                           <td className="py-2">
                             {result}
@@ -122,7 +126,7 @@ export default async function WorkoutDetailPage({ params, searchParams }: { para
           })}
           {w.notes ? (
             <Card>
-              <CardHeader title="Notizen" />
+              <CardHeader title={t.history.notes} />
               <CardBody className="whitespace-pre-wrap pt-2 text-sm text-muted">{w.notes}</CardBody>
             </Card>
           ) : null}
@@ -130,7 +134,7 @@ export default async function WorkoutDetailPage({ params, searchParams }: { para
 
         <div className="space-y-4">
           <Card>
-            <CardHeader title="Bestleistungen" description={prs.length ? undefined : "In diesem Training keine neuen Rekorde."} />
+            <CardHeader title={t.history.prs} description={prs.length ? undefined : t.history.noPrs} />
             {prs.length ? (
               <ul className="space-y-2 p-4 pt-3">
                 {prs.map((p, i) => (
@@ -139,8 +143,8 @@ export default async function WorkoutDetailPage({ params, searchParams }: { para
                     <div className="min-w-0 text-sm">
                       <p className="truncate font-medium">{exById.get(p.exerciseId)?.name}</p>
                       <p className="text-muted">
-                        {PR_LABELS[p.kind]}: <span className="tabular text-text">{prValue(p, unit)}</span>
-                        {p.previous != null ? <span className="tabular text-subtle"> (vorher {prPrev(p, unit)})</span> : null}
+                        {t.prs[p.kind]}: <span className="tabular text-text">{prValue(p, unit, t)}</span>
+                        {p.previous != null ? <span className="tabular text-subtle">{fmt(t.history.previousValue, { value: prPrev(p, unit, t) })}</span> : null}
                       </p>
                     </div>
                   </li>
@@ -151,7 +155,7 @@ export default async function WorkoutDetailPage({ params, searchParams }: { para
             )}
           </Card>
           <Card>
-            <CardHeader title="Beanspruchte Muskeln" description="Direkte Sätze, indirekt anteilig" />
+            <CardHeader title={t.history.musclesWorked} description={t.history.musclesHint} />
             <ul className="space-y-2.5 p-4 pt-3">
               {muscles.map((m) => {
                 const ws = weightedSets(m.contribution, settings.secondaryMuscleWeight);
@@ -164,7 +168,7 @@ export default async function WorkoutDetailPage({ params, searchParams }: { para
                         {m.contribution.indirectSets ? (
                           <span className="text-subtle">
                             {m.contribution.directSets ? " + " : ""}
-                            {m.contribution.indirectSets} indirekt
+                            {fmt(t.muscleMap.indirect, { n: m.contribution.indirectSets })}
                           </span>
                         ) : null}
                       </span>
@@ -177,7 +181,7 @@ export default async function WorkoutDetailPage({ params, searchParams }: { para
               })}
             </ul>
           </Card>
-          {w.bodyweightKg ? <p className="px-1 text-xs text-subtle">Körpergewicht bei diesem Training: {formatWeight(w.bodyweightKg, unit)}</p> : null}
+          {w.bodyweightKg ? <p className="px-1 text-xs text-subtle">{fmt(t.history.bodyweightAt, { value: formatWeight(w.bodyweightKg, unit) })}</p> : null}
         </div>
       </div>
     </div>
@@ -194,17 +198,17 @@ function Kpi({ label, value, hint }: { label: string; value: string; hint?: stri
   );
 }
 
-function prValue(p: { kind: string; value: number; loadKg: number | null; reps: number | null }, unit: WeightUnit) {
+function prValue(p: { kind: string; value: number; loadKg: number | null; reps: number | null }, unit: WeightUnit, t: Dict) {
   if (p.kind === "max_reps_at_load") return `${p.reps} × ${formatWeight(p.loadKg, unit)}`;
-  if (p.kind === "max_reps") return `${p.value} Wdh.`;
+  if (p.kind === "max_reps") return fmt(t.common.repsShort, { n: p.value });
   if (p.kind === "max_set_volume") return formatVolume(p.value, unit);
   if (p.kind === "e1rm") return `≈ ${formatWeight(p.value, unit)}`;
   return formatWeight(p.value, unit);
 }
 
-function prPrev(p: { kind: string; previous: number | null }, unit: WeightUnit) {
+function prPrev(p: { kind: string; previous: number | null }, unit: WeightUnit, t: Dict) {
   if (p.previous == null) return "";
-  if (p.kind === "max_reps_at_load" || p.kind === "max_reps") return `${p.previous} Wdh.`;
+  if (p.kind === "max_reps_at_load" || p.kind === "max_reps") return fmt(t.common.repsShort, { n: p.previous });
   if (p.kind === "max_set_volume") return formatVolume(p.previous, unit);
   return formatWeight(p.previous, unit);
 }

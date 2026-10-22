@@ -5,18 +5,21 @@ import { getSettings } from "@/server/queries/settings";
 import { PageHeader } from "@/components/ui/page-header";
 import { ExerciseForm } from "@/components/exercises/exercise-form";
 import type { LoadMode } from "@/lib/training";
+import { getT } from "@/server/i18n";
 
-export const metadata: Metadata = { title: "Übung bearbeiten" };
+export async function generateMetadata(): Promise<Metadata> {
+  return { title: (await getT()).exercises.editTitle };
+}
 
 export default async function EditExercisePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const [exercise, reference, settings] = await Promise.all([getExercise(decodeURIComponent(id)), getReferenceData(), getSettings()]);
+  const [t, exercise, reference, settings] = await Promise.all([getT(), getExercise(decodeURIComponent(id)), getReferenceData(), getSettings()]);
   if (!exercise) notFound();
   return (
     <div className="mx-auto max-w-3xl">
       <PageHeader
-        title="Übung bearbeiten"
-        subtitle={!exercise.isCustom ? "Standardübung – deine Änderungen bleiben bei App-Updates erhalten." : undefined}
+        title={t.exercises.editTitle}
+        subtitle={!exercise.isCustom ? t.exercises.builtinEditHint : undefined}
         back={{ href: `/exercises/${exercise.id}`, label: exercise.name }}
       />
       <ExerciseForm

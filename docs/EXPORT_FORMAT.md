@@ -21,7 +21,7 @@ Vollständiger Datenaustausch als JSON (UTF-8). Automatische Backups sind diesel
     "weightUnit": "kg", "heightUnit": "cm", "weekStart": 1, "timezone": "Europe/Berlin",
     "defaultRestSeconds": 90, "autoStartRestTimer": true, "restTimerSound": true, "keepScreenAwake": true,
     "effortMetric": "rir", "defaultBodyweightMode": "bodyweight_plus",
-    "bodyweightInVolume": true, "secondaryMuscleWeight": 0.5
+    "bodyweightInVolume": true, "secondaryMuscleWeight": 0.5, "locale": "de"
   },
   "profile": { "name": "…", "birthDate": null, "sex": null, "heightCm": 182, "targetWeightKg": null, "trainingLevel": null, "goals": null },
   "muscleGroups":     [{ "id": "chest", "name": "Brust", "parentId": null, "region": "upper", "sortOrder": 0, "isBuiltin": true }],
@@ -71,10 +71,12 @@ Vollständiger Datenaustausch als JSON (UTF-8). Automatische Backups sind diesel
 }
 ```
 
+`settings.locale` (`de` | `en` | `ru` | `uk`, seit 1.3.0) ist optional; fehlt es, bleibt die aktuelle Sprache erhalten.
+
 ## Import-Verhalten
 
 1. Prüfung von `format`/`version`, Struktur und Datentypen (zod) sowie aller Referenzen (Übungen, Muskelgruppen, Vorlagen, Kalendereinträge; höchstens ein aktives Training; ein Körpergewichtseintrag pro Tag).
-2. Vorschau mit Anzahl der Datensätze, Bestätigung durch Eingabe von `ERSETZEN`.
+2. Vorschau mit Anzahl der Datensätze, Bestätigung durch Eingabe des Bestätigungsworts der Oberflächensprache (`ERSETZEN`, `REPLACE`, `ЗАМЕНИТЬ`, `ЗАМІНИТИ`).
 3. Automatisches Sicherheits-Backup des aktuellen Stands.
 4. In **einer Transaktion**: alle persönlichen Daten löschen, Inhalt der Datei einspielen. Bei jedem Fehler wird vollständig zurückgerollt.
 5. Danach werden die Standarddaten der installierten App-Version ergänzt bzw. aktualisiert (nicht bearbeitete Standardübungen).

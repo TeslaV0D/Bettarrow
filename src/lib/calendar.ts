@@ -1,4 +1,5 @@
 import { addDays, eachDay, isoWeekday, type YMD } from "./dates";
+import { weekdayNames } from "./format";
 
 export type PlanKind = "workout" | "rest";
 export type PlanStatus = "planned" | "completed" | "skipped" | "cancelled";
@@ -96,15 +97,6 @@ export function displayStatus(entry: Pick<CalendarEntry, "kind" | "status" | "da
   return "planned";
 }
 
-export const DISPLAY_STATUS_LABELS: Record<DisplayStatus, string> = {
-  planned: "Geplant",
-  completed: "Abgeschlossen",
-  missed: "Nicht absolviert",
-  skipped: "Ausgefallen",
-  moved: "Verschoben",
-  rest: "Geplanter Ruhetag",
-};
-
 /**
  * Summary state of a single day for compact displays (week strip, month grid).
  * An empty day is "empty" — it is never interpreted as a rest day.
@@ -126,7 +118,7 @@ export function dayState(
 }
 
 export function weekdaysLabel(weekdays: number[]): string {
-  const names = ["Mo", "Di", "Mi", "Do", "Fr", "Sa", "So"];
+  const names = weekdayNames();
   return [...weekdays].sort((a, b) => a - b).map((d) => names[d - 1]).join(", ");
 }
 

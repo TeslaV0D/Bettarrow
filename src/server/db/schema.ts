@@ -355,10 +355,13 @@ export const settings = pgTable(
     bodyweightInVolume: boolean().notNull().default(true),
     /** Weight (0..1) of a set for each secondary muscle in muscle-group analytics. */
     secondaryMuscleWeight: numeric({ precision: 3, scale: 2, mode: "number" }).notNull().default(0.5),
+    /** UI language: de | en | ru | uk */
+    locale: text().notNull().default("de"),
     ...timestamps,
   },
   (t) => [
     check("settings_singleton_chk", sql`${t.id} = 1`),
+    check("settings_locale_chk", sql`${t.locale} in ('de','en','ru','uk')`),
     check("settings_week_start_chk", sql`${t.weekStart} between 1 and 7`),
     check(
       "settings_secondary_weight_chk",

@@ -6,8 +6,10 @@ import { z } from "zod";
 import { db } from "@/server/db";
 import * as s from "@/server/db/schema";
 import { run, UserError } from "./_util";
+import { msg, plural } from "@/lib/i18n";
+import { getT } from "@/server/i18n";
 
-const name = z.string().trim().min(2, "Name zu kurz").max(60, "Name zu lang");
+const name = z.string().trim().min(2, msg("categories.nameTooShort")).max(60, msg("categories.nameTooLong"));
 const slug = (n: string) =>
   "custom_" +
   n
@@ -33,7 +35,7 @@ export async function addCategoryAction(input: { type: "equipment" | "pattern" |
       const parentId = input.parentId || null;
       if (parentId) {
         const [p] = await db.select({ parentId: s.muscleGroups.parentId }).from(s.muscleGroups).where(eq(s.muscleGroups.id, parentId));
-        if (!p || p.parentId) throw new UserError("Ungültige Obergruppe");
+        if (!p || p.parentId) throw new UserError(msg("categories.invalidParent"));
       }
       await db.insert(s.muscleGroups).values({ id, name: n, parentId, region: z.enum(["upper", "core", "lower"]).parse(input.region ?? "upper"), sortOrder: 1000, isBuiltin: false });
     }
@@ -48,7 +50,7 @@ export async function deleteCategoryAction(type: "equipment" | "pattern" | "musc
     const cid = z.string().startsWith("custom_").parse(id);
     if (type === "equipment") {
       const [u] = await db.select({ n: sql<number>`count(*)::int` }).from(s.exercises).where(eq(s.exercises.equipmentId, cid));
-      if (u.n) throw new UserError(`Wird von ${u.n} Übung(en) verwendet.`);
+      if (u.n) throw new UserError(plural((await getT()).categories.usedBy, u.n));
       await db.delete(s.equipment).where(and(eq(s.equipment.id, cid), eq(s.equipment.isBuiltin, false)));
     } else if (type === "pattern") {
       await db.delete(s.movementPatterns).where(and(eq(s.movementPatterns.id, cid), eq(s.movementPatterns.isBuiltin, false)));
@@ -56,7 +58,7 @@ export async function deleteCategoryAction(type: "equipment" | "pattern" | "musc
       const [u] = await db.select({ n: sql<number>`count(*)::int` }).from(s.exercises).where(eq(s.exercises.primaryMuscleId, cid));
       const [v] = await db.select({ n: sql<number>`count(*)::int` }).from(s.exerciseSecondaryMuscles).where(eq(s.exerciseSecondaryMuscles.muscleId, cid));
       const [c] = await db.select({ n: sql<number>`count(*)::int` }).from(s.muscleGroups).where(or(eq(s.muscleGroups.parentId, cid)));
-      if (u.n + v.n + c.n) throw new UserError("Muskelgruppe wird noch verwendet.");
+      if (u.n + v.n + c.n) throw new UserError(msg("categories.muscleInUse"));
       await db.delete(s.muscleGroups).where(and(eq(s.muscleGroups.id, cid), eq(s.muscleGroups.isBuiltin, false)));
     }
     revalidatePath("/", "layout");

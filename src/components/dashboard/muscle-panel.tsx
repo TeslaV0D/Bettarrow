@@ -4,6 +4,8 @@ import Link from "next/link";
 import { useState } from "react";
 import { MuscleMap } from "@/components/body/muscle-map";
 import { formatNumber } from "@/lib/format";
+import { fmt, plural } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 
 export interface MuscleStat {
   muscleId: string;
@@ -33,6 +35,7 @@ export function MusclePanel({
   targetSets: number;
 }) {
   const [selected, setSelected] = useState<string | null>(null);
+  const t = useT();
   const intensity = Object.fromEntries(stats.map((m) => [m.muscleId, Math.min(1, m.weightedSets / targetSets)]));
   const sel = selected ? stats.find((m) => m.muscleId === selected) : null;
   const related = selected ? exercises.filter((e) => e.primaryMuscleId === selected || e.secondaryMuscleIds.includes(selected)) : [];
@@ -46,10 +49,10 @@ export function MusclePanel({
             <p className="font-medium">{labels[selected] ?? selected}</p>
             {sel ? (
               <p className="text-muted">
-                {sel.directSets} direkte Sätze{sel.indirectSets ? `, ${sel.indirectSets} indirekt` : ""} · gewichtet {formatNumber(sel.weightedSets)}
+                {plural(t.muscleMap.directSets, sel.directSets)}{sel.indirectSets ? `, ${fmt(t.muscleMap.indirect, { n: sel.indirectSets })}` : ""} · {fmt(t.muscleMap.weighted, { value: formatNumber(sel.weightedSets) })}
               </p>
             ) : (
-              <p className="text-muted">Diese Woche nicht trainiert.</p>
+              <p className="text-muted">{t.muscleMap.notTrainedThisWeek}</p>
             )}
             {related.length ? (
               <ul className="mt-2 space-y-1">
@@ -59,7 +62,7 @@ export function MusclePanel({
                       {e.name}
                     </Link>
                     <span className="tabular shrink-0 text-muted">
-                      {e.workingSets} {e.primaryMuscleId === selected ? "Sätze" : "Sätze (indirekt)"}
+                      {plural(e.primaryMuscleId === selected ? t.units.sets : t.muscleMap.setsIndirect, e.workingSets)}
                     </span>
                   </li>
                 ))}
@@ -67,7 +70,7 @@ export function MusclePanel({
             ) : null}
           </>
         ) : (
-          <p className="text-muted">Tippe auf einen Muskel, um die Sätze und Übungen dieser Woche zu sehen.</p>
+          <p className="text-muted">{t.muscleMap.tapHint}</p>
         )}
       </div>
     </div>

@@ -14,6 +14,9 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { Field, Input, Textarea } from "@/components/ui/input";
 import { ExercisePicker } from "@/components/exercises/exercise-picker";
 import { exerciseSubtitle, useReferenceMaps, type Reference } from "@/components/exercises/use-exercise-search";
+import { uuid } from "@/lib/uuid";
+import { translateMessage } from "@/lib/i18n";
+import { useT } from "@/components/i18n-provider";
 
 export interface EditorItem {
   key: string;
@@ -46,6 +49,7 @@ export function TemplateEditor({
   recentIds: string[];
 }) {
   const router = useRouter();
+  const t = useT();
   const maps = useReferenceMaps(reference);
   const byId = useMemo(() => new Map(catalog.map((e) => [e.id, e])), [catalog]);
   const [v, setV] = useState<EditorValues>(initial);
@@ -87,7 +91,7 @@ export function TemplateEditor({
         ...ids.map((exerciseId) => {
           const ex = byId.get(exerciseId);
           return {
-            key: crypto.randomUUID(),
+            key: uuid(),
             exerciseId,
             targetSets: 3,
             repMin: ex?.repMin?.toString() ?? "",
@@ -118,7 +122,8 @@ export function TemplateEditor({
     if (!parsed.success) {
       const issue = parsed.error.issues[0];
       const idx = typeof issue.path[1] === "number" ? issue.path[1] : null;
-      const msg = idx != null ? `${byId.get(v.items[idx].exerciseId)?.name ?? "Übung"}: ${issue.message}` : issue.message;
+      const text = translateMessage(t, issue.message);
+      const msg = idx != null ? `${byId.get(v.items[idx].exerciseId)?.name ?? t.common.exercise}: ${text}` : text;
       setErrors(msg);
       toast.error(msg);
       return;
@@ -131,7 +136,7 @@ export function TemplateEditor({
         return;
       }
       setDirty(false);
-      toast.success("Vorlage gespeichert");
+      toast.success(t.templates.saved);
       router.push("/templates");
       router.refresh();
     });
@@ -140,13 +145,13 @@ export function TemplateEditor({
   return (
     <div className="space-y-5">
       <Card className="space-y-4 p-4 sm:p-5">
-        <Field label="Name" htmlFor="tpl-name">
-          <Input id="tpl-name" value={v.name} onChange={(e) => update((p) => ({ ...p, name: e.target.value }))} placeholder="z. B. Push, Oberkörper A" maxLength={80} />
+        <Field label={t.common.name} htmlFor="tpl-name">
+          <Input id="tpl-name" value={v.name} onChange={(e) => update((p) => ({ ...p, name: e.target.value }))} placeholder={t.templates.namePlaceholder} maxLength={80} />
         </Field>
-        <Field label="Beschreibung (optional)" htmlFor="tpl-desc">
+        <Field label={t.templates.descriptionOptional} htmlFor="tpl-desc">
           <Input id="tpl-desc" value={v.description} onChange={(e) => update((p) => ({ ...p, description: e.target.value }))} maxLength={500} />
         </Field>
-        <Field label="Hinweise (optional)" htmlFor="tpl-notes">
+        <Field label={t.templates.notesOptional} htmlFor="tpl-notes">
           <Textarea id="tpl-notes" value={v.notes} onChange={(e) => update((p) => ({ ...p, notes: e.target.value }))} rows={2} />
         </Field>
       </Card>
@@ -154,16 +159,16 @@ export function TemplateEditor({
       <section className="space-y-3">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">
-            Übungen <span className="text-muted">({v.items.length})</span>
+            {t.nav.exercises} <span className="text-muted">({v.items.length})</span>
           </h2>
           <Button size="sm" variant="soft" onClick={() => setPickerOpen(true)}>
             <Plus className="size-4" aria-hidden />
-            Hinzufügen
+            {t.templates.add}
           </Button>
         </div>
         {v.items.length === 0 ? (
           <Card>
-            <EmptyState title="Noch keine Übungen" description="Füge Übungen hinzu und lege Sätze, Wiederholungen und Pausen fest." action={<Button variant="primary" onClick={() => setPickerOpen(true)}><Plus className="size-4" />Übung hinzufügen</Button>} />
+            <EmptyState title={t.workout.noExercises} description={t.templates.emptyExercisesText} action={<Button variant="primary" onClick={() => setPickerOpen(true)}><Plus className="size-4" />{t.workout.addExercise}</Button>} />
           </Card>
         ) : null}
         {v.items.map((it, i) => {
@@ -178,60 +183,60 @@ export function TemplateEditor({
                 </div>
                 <Dropdown>
                   <DropdownTrigger asChild>
-                    <Button size="icon-sm" variant="ghost" aria-label="Aktionen">
+                    <Button size="icon-sm" variant="ghost" aria-label={t.templates.actions}>
                       <Ellipsis className="size-4" />
                     </Button>
                   </DropdownTrigger>
                   <DropdownContent>
                     <DropdownItem icon={ArrowUp} disabled={i === 0} onSelect={() => move(it.key, -1)}>
-                      Nach oben
+                      {t.exerciseCard.moveUp}
                     </DropdownItem>
                     <DropdownItem icon={ArrowDown} disabled={i === v.items.length - 1} onSelect={() => move(it.key, 1)}>
-                      Nach unten
+                      {t.exerciseCard.moveDown}
                     </DropdownItem>
                     <DropdownItem icon={Replace} onSelect={() => setReplaceKey(it.key)}>
-                      Übung tauschen
+                      {t.workout.replaceExercise}
                     </DropdownItem>
                     <DropdownItem icon={StickyNote} onSelect={() => setShowNotes((s) => ({ ...s, [it.key]: true }))}>
-                      Hinweis
+                      {t.templates.hint}
                     </DropdownItem>
                     <DropdownSeparator />
                     <DropdownItem icon={Trash2} destructive onSelect={() => update((p) => ({ ...p, items: p.items.filter((x) => x.key !== it.key) }))}>
-                      Entfernen
+                      {t.common.remove}
                     </DropdownItem>
                   </DropdownContent>
                 </Dropdown>
               </div>
               <div className="mt-3 grid grid-cols-[auto_1fr] gap-3 sm:grid-cols-[auto_1fr_1fr]">
                 <div>
-                  <span className="mb-1 block text-xs text-subtle">Sätze</span>
+                  <span className="mb-1 block text-xs text-subtle">{t.templates.sets}</span>
                   <div className="flex items-center rounded-md border border-border bg-surface-2">
-                    <button type="button" className="grid size-10 place-items-center text-muted hover:text-text disabled:opacity-40" onClick={() => updateItem(it.key, { targetSets: Math.max(1, it.targetSets - 1) })} disabled={it.targetSets <= 1} aria-label="Satz weniger">
+                    <button type="button" className="grid size-10 place-items-center text-muted hover:text-text disabled:opacity-40" onClick={() => updateItem(it.key, { targetSets: Math.max(1, it.targetSets - 1) })} disabled={it.targetSets <= 1} aria-label={t.templates.setLess}>
                       <Minus className="size-4" />
                     </button>
                     <span className="tabular w-7 text-center font-semibold" aria-live="polite">
                       {it.targetSets}
                     </span>
-                    <button type="button" className="grid size-10 place-items-center text-muted hover:text-text disabled:opacity-40" onClick={() => updateItem(it.key, { targetSets: Math.min(20, it.targetSets + 1) })} disabled={it.targetSets >= 20} aria-label="Satz mehr">
+                    <button type="button" className="grid size-10 place-items-center text-muted hover:text-text disabled:opacity-40" onClick={() => updateItem(it.key, { targetSets: Math.min(20, it.targetSets + 1) })} disabled={it.targetSets >= 20} aria-label={t.templates.setMore}>
                       <Plus className="size-4" />
                     </button>
                   </div>
                 </div>
                 <div>
-                  <span className="mb-1 block text-xs text-subtle">{ex?.tracking === "duration" ? "Ziel (Wdh. optional)" : "Wiederholungen"}</span>
+                  <span className="mb-1 block text-xs text-subtle">{ex?.tracking === "duration" ? t.templates.targetOptionalReps : t.templates.reps}</span>
                   <div className="flex items-center gap-1.5">
-                    <Input aria-label="Wiederholungen min" inputMode="numeric" className="h-10 text-center" value={it.repMin} onChange={(e) => updateItem(it.key, { repMin: e.target.value.replace(/\D/g, "") })} placeholder="min" />
+                    <Input aria-label={t.templates.repsMin} inputMode="numeric" className="h-10 text-center" value={it.repMin} onChange={(e) => updateItem(it.key, { repMin: e.target.value.replace(/\D/g, "") })} placeholder="min" />
                     <span className="text-subtle">–</span>
-                    <Input aria-label="Wiederholungen max" inputMode="numeric" className="h-10 text-center" value={it.repMax} onChange={(e) => updateItem(it.key, { repMax: e.target.value.replace(/\D/g, "") })} placeholder="max" />
+                    <Input aria-label={t.templates.repsMax} inputMode="numeric" className="h-10 text-center" value={it.repMax} onChange={(e) => updateItem(it.key, { repMax: e.target.value.replace(/\D/g, "") })} placeholder="max" />
                   </div>
                 </div>
                 <div className="col-span-2 sm:col-span-1">
-                  <span className="mb-1 block text-xs text-subtle">Pause (Sek.)</span>
-                  <Input aria-label="Pause in Sekunden" inputMode="numeric" className="h-10" value={it.restSeconds} onChange={(e) => updateItem(it.key, { restSeconds: e.target.value.replace(/\D/g, "") })} placeholder="Standard" />
+                  <span className="mb-1 block text-xs text-subtle">{t.templates.restSec}</span>
+                  <Input aria-label={t.templates.restSecLabel} inputMode="numeric" className="h-10" value={it.restSeconds} onChange={(e) => updateItem(it.key, { restSeconds: e.target.value.replace(/\D/g, "") })} placeholder={t.templates.default} />
                 </div>
               </div>
               {showNotes[it.key] || it.notes ? (
-                <Input aria-label="Hinweis zur Übung" className="mt-3 h-10" value={it.notes} onChange={(e) => updateItem(it.key, { notes: e.target.value })} placeholder="Hinweis, z. B. Tempo 3-1-1" maxLength={1000} />
+                <Input aria-label={t.templates.exerciseHint} className="mt-3 h-10" value={it.notes} onChange={(e) => updateItem(it.key, { notes: e.target.value })} placeholder={t.templates.exerciseHintPlaceholder} maxLength={1000} />
               ) : null}
             </Card>
           );
@@ -242,10 +247,10 @@ export function TemplateEditor({
 
       <div className="sticky bottom-24 z-30 flex justify-end gap-2 rounded-lg border border-border bg-surface/95 p-2 backdrop-blur lg:bottom-4">
         <Button variant="ghost" onClick={() => router.back()}>
-          Abbrechen
+          {t.common.cancel}
         </Button>
         <Button variant="primary" onClick={save} loading={pending} disabled={!v.name.trim()}>
-          Vorlage speichern
+          {t.templates.save}
         </Button>
       </div>
 
@@ -257,7 +262,7 @@ export function TemplateEditor({
         reference={reference}
         recentIds={recentIds}
         multiple={false}
-        title="Übung tauschen"
+        title={t.workout.replaceExercise}
         onConfirm={([id]) => replaceKey && updateItem(replaceKey, { exerciseId: id })}
       />
     </div>
